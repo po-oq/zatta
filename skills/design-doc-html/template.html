@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}}</title>
+<style>
+:root{
+  --ink:#16232e; --ink-soft:#4a5b68; --ink-mute:#8494a2;
+  --paper:#f7f8f6; --panel:#ffffff; --rule:#d9ded9;
+  --indigo:#17456b; --indigo-soft:#e7edf3;
+  --miss:#a92c1f; --miss-bg:#fbeeec;
+  --derive:#6b4d9c; --derive-bg:#f2eefa;
+  --new:#0f7355; --upd:#8a6100; --del:#a92c1f; --keep:#7e8a88;
+  --sans:"Hiragino Kaku Gothic ProN","Yu Gothic","Noto Sans JP","Segoe UI",system-ui,sans-serif;
+  --serif:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Noto Sans Mono",monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.85;-webkit-font-smoothing:antialiased}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
+
+.statusbar{position:sticky;top:0;z-index:20;background:var(--ink);color:#eef2f4;border-bottom:3px solid var(--indigo)}
+.statusbar .inner{max-width:1120px;margin:0 auto;padding:10px 24px;display:flex;flex-wrap:wrap;gap:8px 18px;align-items:baseline}
+.statusbar .title{font-family:var(--serif);font-size:16px;letter-spacing:.04em;margin-right:auto}
+.chip{font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:#b9c6d0}
+.chip b{color:#fff;font-weight:600}
+
+.wrap{max-width:1120px;margin:0 auto;padding:0 24px;display:grid;grid-template-columns:190px 1fr;gap:40px}
+nav.toc{position:sticky;top:72px;align-self:start;padding-top:40px;font-size:12.5px;line-height:1.6}
+nav.toc .lyr{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--indigo);border-bottom:1px solid var(--rule);padding-bottom:4px;margin-bottom:8px;display:block}
+nav.toc a{display:block;color:var(--ink-soft);text-decoration:none;padding:2px 0}
+nav.toc a.sub{padding-left:12px;font-size:12px}
+nav.toc a:hover,nav.toc a:focus{color:var(--indigo)}
+main{padding:40px 0 96px;max-width:790px}
+@media(max-width:960px){.wrap{grid-template-columns:1fr;gap:0}nav.toc{display:none}main{padding-top:26px}}
+
+h2{font-family:var(--serif);font-size:19px;font-weight:600;letter-spacing:.03em;margin:40px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--rule);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+h2:first-of-type{margin-top:8px}
+h2 .no{font-family:var(--mono);font-size:11px;color:var(--indigo);letter-spacing:.12em}
+h3{font-size:15px;font-weight:700;margin:26px 0 8px;color:var(--indigo)}
+p{margin:8px 0} ul{margin:8px 0;padding-left:1.15em} li{margin:3px 0}
+table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px;background:var(--panel)}
+th,td{border:1px solid var(--rule);padding:8px 10px;text-align:left;vertical-align:top}
+th{background:var(--indigo-soft);font-size:12px;letter-spacing:.04em;font-weight:600}
+tr.danger td{background:var(--miss-bg)}
+code{font-family:var(--mono);font-size:12.5px;background:#eef1ee;padding:1px 5px;border-radius:2px}
+pre{margin:10px 0;background:#f0f3f0;border:1px solid var(--rule);border-left:3px solid var(--indigo);overflow:auto}
+pre code{font-family:var(--mono);font-size:12.5px;line-height:1.7;background:none;padding:12px 14px;display:block}
+
+/* highlight.js テーマ（この文書の配色に合わせた自前定義） */
+.hljs-comment,.hljs-quote{color:#7e8a88;font-style:italic}
+.hljs-keyword,.hljs-selector-tag,.hljs-literal,.hljs-section,.hljs-name{color:#17456b;font-weight:600}
+.hljs-string,.hljs-symbol,.hljs-bullet{color:#0f7355}
+.hljs-number,.hljs-regexp{color:#8a6100}
+.hljs-title,.hljs-title.function_,.hljs-title.class_{color:#6b4d9c;font-weight:600}
+.hljs-type,.hljs-built_in{color:#a4508a}
+.hljs-attr,.hljs-attribute,.hljs-variable,.hljs-params{color:#16232e}
+.hljs-meta,.hljs-doctag{color:#7e8a88}
+
+.tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;padding:2px 7px;border:1px solid;border-radius:2px;white-space:nowrap;display:inline-block}
+.tag.new{color:var(--new);border-color:var(--new)}
+.tag.upd{color:var(--upd);border-color:var(--upd)}
+.tag.del{color:var(--del);border-color:var(--del)}
+.missing{font-family:var(--mono);font-size:11px;color:var(--miss);background:var(--miss-bg);border:1px dashed var(--miss);padding:1px 7px;border-radius:2px;white-space:nowrap}
+.derived{font-family:var(--mono);font-size:10.5px;color:var(--derive);background:var(--derive-bg);border:1px solid var(--derive);padding:1px 7px;border-radius:2px;white-space:nowrap}
+.todo{background:var(--miss-bg);border:1px dashed var(--miss);padding:14px 18px;margin:12px 0}
+.todo p{margin:4px 0;font-size:13.5px}
+.todo .head{font-weight:700;color:var(--miss)}
+.warn{font-size:12.5px;color:var(--upd);margin-top:8px}
+
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:12px 0}
+.box{background:var(--panel);border:1px solid var(--rule);padding:14px 16px}
+.box h3{margin:0 0 6px}
+.box p{font-size:13px;color:var(--ink-soft);margin-bottom:0}
+@media(max-width:700px){.two{grid-template-columns:1fr}}
+
+.uc{background:var(--panel);border:1px solid var(--rule);margin:8px 0;overflow:hidden}
+.uc-h{display:flex;align-items:baseline;gap:8px;padding:9px 14px;background:var(--indigo-soft);font-weight:700;font-size:13.5px;border-bottom:1px solid var(--rule)}
+.uc-g{display:grid;grid-template-columns:52px 1fr;gap:3px 12px;padding:11px 14px;font-size:13.5px}
+.uc-k{font-family:var(--mono);font-size:11px;color:var(--indigo);padding-top:4px}
+
+.verb{font-family:var(--mono);font-size:10.5px;font-weight:700;color:#fff;border-radius:2px;padding:1px 6px;display:inline-block}
+.v-get{background:#37674f} .v-post{background:#2b4c6f}
+.v-patch{background:#8a6410} .v-delete{background:#9e3833}
+.irrev{font-size:10.5px;background:var(--del);color:#fff;border-radius:2px;padding:1px 6px;font-family:var(--mono)}
+.lay{font-size:10.5px;font-family:var(--mono);border-radius:2px;padding:1px 6px;white-space:nowrap}
+.lay-f{background:#eaf0f6;color:#2b4c6f} .lay-b{background:#eef2ec;color:#37674f}
+
+details{background:var(--panel);border:1px solid var(--rule);margin:10px 0}
+details[open]{border-color:var(--indigo)}
+summary{cursor:pointer;padding:12px 16px;font-weight:700;font-size:14px;list-style:none;display:flex;align-items:center;gap:10px;font-family:var(--mono)}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"＋";color:var(--indigo);font-size:13px}
+details[open]>summary::before{content:"−"}
+summary .hint{margin-left:auto;font-size:10.5px;color:var(--ink-soft);font-weight:400}
+.body{padding:2px 20px 20px}
+.body h4{font-size:13px;margin:16px 0 4px;color:var(--ink-soft);font-family:var(--mono);letter-spacing:.08em}
+:focus-visible{outline:2px solid var(--indigo);outline-offset:2px}
+
+.graph{background:var(--panel);border:1px solid var(--rule);padding:14px;overflow:auto}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:var(--ink-soft);margin-top:10px}
+.legend i{display:inline-block;width:22px;margin-right:6px;vertical-align:middle}
+.li-s{border-top:2px solid #17456b} .li-d{border-top:2px dashed #8a6410}
+.loadfail{font-size:12px;color:var(--miss);margin:0 0 8px}
+.pz-hint{font-size:11px;color:var(--ink-mute);font-family:var(--mono);margin:4px 0 0;text-align:right}
+.mermaid svg{display:block}
+footer{max-width:1120px;margin:0 auto;padding:22px 24px;border-top:1px solid var(--rule);font-size:12px;color:var(--ink-soft)}
+</style>
+</head>
+<body>
+
+<div class="statusbar">
+  <div class="inner">
+    <span class="title">{{TITLE}}</span>
+    <span class="chip">原本 <b>{{SOURCE_FILE}}</b></span>
+    <span class="chip">作成 <b>{{DATE}}</b></span>
+  </div>
+</div>
+
+<div class="wrap">
+<nav class="toc">
+  <span class="lyr">目次</span>
+{{TOC}}
+</nav>
+
+<main>
+<!-- ここから本文。各セクションの書き方は SKILL.md を参照 -->
+{{BODY}}
+</main>
+</div>
+
+<footer>
+  <span class="missing">記載なし</span> は元の要件定義書に情報がなかった箇所、
+  <span class="derived">導出</span> は既存の記述から起こしたもの。それ以外は要件定義書の内容を並べ替えて要約したもので、内容は変えていない。
+</footer>
+
+<script>
+(function(){
+  // 候補URLを順に試し、最初に読めたものを使う
+  function loadFirst(urls, isReady, done){
+    var i = 0;
+    (function next(){
+      if (isReady()) return done(true);
+      if (i >= urls.length) return done(false);
+      var s = document.createElement('script');
+      s.src = urls[i++];
+      s.onload  = function(){ isReady() ? done(true) : next(); };
+      s.onerror = next;
+      document.head.appendChild(s);
+    })();
+  }
+
+  // ---- 図の定義をあらかじめ退避（読み込み失敗時に元の定義を出すため）----
+  var nodes = Array.prototype.slice.call(document.querySelectorAll('.mermaid'));
+  nodes.forEach(function(el){
+    // <br/> は textContent に残らないので、innerHTML から改行として取り出す
+    el.setAttribute('data-src', el.innerHTML.replace(/<br\s*\/?>/gi, ' / ').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&'));
+  });
+  function fallback(el){
+    var msg = document.createElement('p');
+    msg.className = 'loadfail';
+    msg.textContent = '図の描画ライブラリを読み込めませんでした。定義をそのまま表示しています。';
+    var pre = document.createElement('pre');
+    var code = document.createElement('code');
+    code.textContent = (el.getAttribute('data-src') || '').trim();
+    pre.appendChild(code);
+    el.replaceWith(msg, pre);
+  }
+
+  // ---- highlight.js ----
+  loadFirst([
+    'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js',
+    'https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/lib/common.min.js',
+    'https://unpkg.com/@highlightjs/cdn-assets@11.11.1/highlight.min.js'
+  ], function(){ return typeof hljs !== 'undefined'; }, function(ok){
+    if (!ok) return; // 読めなければ素のまま表示するだけ
+    document.querySelectorAll('pre code[class^="language-"]').forEach(function(el){
+      if (el.classList.contains('language-plaintext')) return; // ツリーは色を付けない
+      try { hljs.highlightElement(el); } catch(e) {}
+    });
+  });
+
+  // ---- mermaid ----
+  // cdnjs は反映が遅く最新版が無いことがあるため、cdnjs にある版を第1候補にする
+  loadFirst([
+    'https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.12.0/mermaid.min.js',
+    'https://cdn.jsdelivr.net/npm/mermaid@11.16.0/dist/mermaid.min.js',
+    'https://unpkg.com/mermaid@11.16.0/dist/mermaid.min.js'
+  ], function(){ return typeof mermaid !== 'undefined'; }, function(ok){
+    if (!ok) { nodes.forEach(fallback); return; }
+    try {
+      mermaid.initialize({
+        startOnLoad:false, theme:'base',
+        // strict だとノードラベル内の <br/> がタグのまま表示されるため antiscript を使う
+        securityLevel:'antiscript',
+        themeVariables:{ fontFamily:'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize:'12px' }
+      });
+      mermaid.run({ nodes: nodes })
+        .then(enablePanZoom)
+        .catch(function(){ nodes.forEach(fallback); });
+    } catch(e){ nodes.forEach(fallback); }
+  });
+
+  // ---- svg-pan-zoom（読めなければズーム無しで表示するだけ）----
+  function enablePanZoom(){
+    loadFirst([
+      'https://cdn.jsdelivr.net/npm/svg-pan-zoom@3/dist/svg-pan-zoom.min.js',
+      'https://unpkg.com/svg-pan-zoom@3/dist/svg-pan-zoom.min.js'
+    ], function(){ return typeof svgPanZoom !== 'undefined'; }, function(ready){
+      if (!ready) return;
+      document.querySelectorAll('.mermaid svg').forEach(function(svg){
+        // mermaid が付ける max-width を外さないと拡大しても広がらない
+        svg.style.maxWidth = 'none';
+        svg.style.width = '100%';
+        svg.style.height = '400px';
+        try {
+          svgPanZoom(svg, {
+            zoomEnabled:true, controlIconsEnabled:true, fit:true, center:true,
+            minZoom:0.3, maxZoom:8,
+            mouseWheelZoomEnabled:false, // ページスクロールを奪わないため
+            dblClickZoomEnabled:false
+          });
+          var hint = document.createElement('p');
+          hint.className = 'pz-hint';
+          hint.textContent = 'ドラッグで移動、左下のボタンで拡大・縮小・リセット';
+          svg.parentNode.appendChild(hint);
+        } catch(e){}
+      });
+    });
+  }
+})();
+</script>
+</body>
+</html>
