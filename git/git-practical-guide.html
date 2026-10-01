@@ -1,0 +1,1217 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gitで「混ざった」「戻したい」を自力で直す実践ガイド</title>
+<style>
+:root{
+  --ink:#1b2430; --ink-2:#4a5565; --paper:#f3f5f9; --panel:#ffffff; --line:#d3dae5;
+  --tree:#2b72c9; --tree-bg:#e3eefb;
+  --index:#a8670a; --index-bg:#fcefd2;
+  --repo:#1f7f59; --repo-bg:#def2e8;
+  --danger:#bf3333; --danger-bg:#fde7e7;
+  --code-bg:#13202e; --code-ink:#e6edf5; --code-dim:#8fa3b8; --code-cmd:#9fd3ff;
+  --radius:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --ink:#e7edf5; --ink-2:#a9b5c6; --paper:#0e1520; --panel:#162130; --line:#2a3b50;
+    --tree:#72b0f5; --tree-bg:#152f4d;
+    --index:#eab24c; --index-bg:#3a2d10;
+    --repo:#5fc79d; --repo-bg:#10362b;
+    --danger:#ff8585; --danger-bg:#42191c;
+    --code-bg:#0a111a;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:64px}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"BIZ UDPGothic","Hiragino Sans","Yu Gothic UI","Meiryo",system-ui,sans-serif;
+  line-height:1.85;font-size:16px}
+code,pre,.mono{font-family:"Cascadia Mono","SF Mono",Consolas,"Noto Sans Mono CJK JP",monospace}
+a{color:var(--tree)}
+:focus-visible{outline:3px solid var(--tree);outline-offset:2px;border-radius:4px}
+
+/* ---------- layout ---------- */
+.wrap{max-width:860px;margin:0 auto;padding:0 20px}
+header.hero{padding:56px 0 28px}
+header.hero h1{font-size:clamp(1.7rem,4.4vw,2.5rem);line-height:1.35;margin:0 0 14px;letter-spacing:.01em}
+header.hero p.lead{margin:0 0 22px;color:var(--ink-2);max-width:40em}
+.legend{display:flex;flex-wrap:wrap;gap:10px;margin:0;padding:0;list-style:none}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;border:2px solid;font-weight:700;font-size:.92rem}
+.chip small{font-weight:400;opacity:.85}
+.c-tree{background:var(--tree-bg);border-color:var(--tree);color:var(--tree)}
+.c-index{background:var(--index-bg);border-color:var(--index);color:var(--index)}
+.c-repo{background:var(--repo-bg);border-color:var(--repo);color:var(--repo)}
+.c-danger{background:var(--danger-bg);border-color:var(--danger);color:var(--danger)}
+nav.toc{position:sticky;top:0;z-index:5;background:var(--paper);border-bottom:1px solid var(--line)}
+nav.toc ul{display:flex;gap:4px;overflow-x:auto;margin:0;padding:8px 20px;list-style:none;max-width:860px;margin:0 auto}
+nav.toc a{display:block;white-space:nowrap;padding:6px 12px;border-radius:8px;text-decoration:none;color:var(--ink-2);font-size:.9rem}
+nav.toc a:hover{background:var(--panel);color:var(--ink)}
+section.ch{padding:44px 0 8px}
+section.ch>.wrap>h2{font-size:1.55rem;line-height:1.4;margin:0 0 6px;padding-bottom:10px;border-bottom:3px solid var(--ink)}
+h3{font-size:1.15rem;margin:38px 0 10px;line-height:1.5}
+h4{font-size:1rem;margin:22px 0 6px}
+p{margin:0 0 14px}
+.story{background:var(--panel);border:1px solid var(--line);border-left:6px solid var(--ink);border-radius:var(--radius);padding:14px 18px;margin:16px 0 8px}
+.story b{display:block;margin-bottom:2px}
+ul.plain,ol.plain{margin:0 0 14px;padding-left:1.4em}
+ul.plain li,ol.plain li{margin:4px 0}
+
+/* ---------- boxes ---------- */
+.box{border-radius:var(--radius);padding:14px 18px;margin:16px 0;border:2px solid}
+.box>:last-child{margin-bottom:0}
+.box .t{font-weight:700;margin-bottom:4px;display:block}
+.box.answer{background:var(--panel);border-color:var(--ink)}
+.box.warn{background:var(--index-bg);border-color:var(--index)}
+.box.danger{background:var(--danger-bg);border-color:var(--danger)}
+.box.ok{background:var(--repo-bg);border-color:var(--repo)}
+.answers{display:grid;gap:12px;margin:18px 0}
+.answers .a{display:grid;grid-template-columns:auto 1fr;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 18px}
+.answers .n{font-weight:800;font-size:1.3rem;color:var(--paper);background:var(--ink);width:2rem;height:2rem;border-radius:50%;display:grid;place-items:center;line-height:1}
+.answers .a p{margin:0}
+
+/* ---------- figures ---------- */
+figure{margin:20px 0;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
+figure svg{display:block;width:100%;height:auto}
+figcaption{font-size:.88rem;color:var(--ink-2);margin-top:8px}
+.s-tree{fill:var(--tree-bg);stroke:var(--tree);stroke-width:2.5}
+.s-index{fill:var(--index-bg);stroke:var(--index);stroke-width:2.5}
+.s-repo{fill:var(--repo-bg);stroke:var(--repo);stroke-width:2.5}
+.s-ghost{fill:none;stroke:var(--ink-2);stroke-width:2;stroke-dasharray:6 5}
+.s-dash-index{fill:var(--index-bg);stroke:var(--index);stroke-width:2.5;stroke-dasharray:7 5}
+.t-ink{fill:var(--ink);font-size:15px}
+.t-dim{fill:var(--ink-2);font-size:13px}
+.t-tree{fill:var(--tree);font-weight:700;font-size:17px}
+.t-index{fill:var(--index);font-weight:700;font-size:17px}
+.t-repo{fill:var(--repo);font-weight:700;font-size:17px}
+.t-cmd{fill:var(--ink);font-size:13px;font-family:"Cascadia Mono","SF Mono",Consolas,"Noto Sans Mono CJK JP",monospace}
+.t-danger{fill:var(--danger);font-weight:700;font-size:14px}
+.ln{stroke:var(--ink);stroke-width:2.2;fill:none}
+.ln-back{stroke:var(--ink-2);stroke-width:2;fill:none;stroke-dasharray:5 4}
+.ln-repo{stroke:var(--repo);stroke-width:3;fill:none}
+.ln-tree{stroke:var(--tree);stroke-width:2.5;fill:none}
+.ln-index{stroke:var(--index);stroke-width:2.5;fill:none}
+.ah{fill:var(--ink)}
+.ah-dim{fill:var(--ink-2)}
+.ah-index{fill:var(--index)}
+
+/* ---------- code / terminal ---------- */
+code.i{background:color-mix(in srgb,var(--ink) 9%,transparent);padding:1px 6px;border-radius:5px;font-size:.92em;word-break:break-word}
+.term{background:var(--code-bg);color:var(--code-ink);border-radius:var(--radius);margin:14px 0;overflow:hidden}
+.term-head{display:flex;justify-content:space-between;align-items:center;padding:6px 10px 6px 14px;background:rgba(255,255,255,.06);font-size:.8rem;color:var(--code-dim)}
+.term button.copy{font:inherit;font-size:.78rem;color:var(--code-ink);background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);border-radius:6px;padding:2px 10px;cursor:pointer}
+.term button.copy:hover{background:rgba(255,255,255,.2)}
+.term pre{margin:0;padding:12px 16px;overflow-x:auto;font-size:.88rem;line-height:1.65}
+.term .l{display:block;white-space:pre}
+.term .cmd{color:var(--code-cmd)}
+.term .cmd::before{content:"$ ";color:var(--code-dim);user-select:none}
+.term .out{color:var(--code-ink)}
+.term .cm{color:var(--code-dim)}
+.term .bad{color:#ff9a9a}
+.term .good{color:#8fe3bb}
+
+/* ---------- tables ---------- */
+.tbl{overflow-x:auto;margin:14px 0}
+table{border-collapse:collapse;width:100%;min-width:560px;background:var(--panel);font-size:.93rem}
+th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+th{background:color-mix(in srgb,var(--ink) 7%,var(--panel));font-weight:700}
+td code,th code{font-size:.88em}
+
+/* ---------- steps ---------- */
+ol.steps{list-style:none;counter-reset:s;margin:14px 0;padding:0}
+ol.steps>li{counter-increment:s;position:relative;padding:0 0 18px 48px;border-left:2px solid var(--line);margin-left:15px}
+ol.steps>li:last-child{border-left-color:transparent;padding-bottom:4px}
+ol.steps>li::before{content:counter(s);position:absolute;left:-16px;top:0;width:30px;height:30px;border-radius:50%;background:var(--ink);color:var(--paper);display:grid;place-items:center;font-weight:800;font-size:.9rem}
+ol.steps>li>.h{font-weight:700;display:block;margin-bottom:4px}
+ol.steps .term{margin:8px 0}
+
+/* ---------- status chips ---------- */
+.st{display:inline-block;font-family:"Cascadia Mono","SF Mono",Consolas,monospace;font-weight:700;padding:1px 8px;border-radius:6px;background:var(--code-bg);color:var(--code-ink);white-space:pre}
+.st .l1{color:#ffd27a}.st .l2{color:#8fc3ff}
+
+/* ---------- additions ---------- */
+.s-blank-index{fill:none;stroke:var(--index);stroke-width:2;stroke-dasharray:4 3}
+.s-blank-tree{fill:none;stroke:var(--tree);stroke-width:2;stroke-dasharray:4 3}
+.s-neutral{fill:var(--panel);stroke:var(--ink-2);stroke-width:2}
+.t-ok{fill:var(--repo);font-weight:700;font-size:14px}
+.t-mono{fill:var(--ink);font-size:18px;font-weight:700;font-family:"Cascadia Mono","SF Mono",Consolas,monospace}
+.term .gr{color:#6fd39a}
+.term .rd{color:#ff8b8b}
+.term .warnc{color:#ffd27a}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:700px){.two{grid-template-columns:1fr}}
+.two .term{margin:6px 0}
+.cap{font-size:.86rem;color:var(--ink-2);margin:0 0 4px}
+.simlink{display:block;padding:14px 18px;border:2px solid var(--ink);border-radius:var(--radius);background:var(--panel);text-decoration:none;color:var(--ink);margin:16px 0}
+.simlink b{display:block;font-size:1.05rem;color:var(--tree);text-decoration:underline}
+.ref td:first-child{white-space:nowrap}
+/* ---------- choose ---------- */
+.choose{display:grid;gap:10px;margin:16px 0}
+.choose .row{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center}
+.choose .q{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:10px 14px}
+.choose .ar{color:var(--ink-2);font-weight:700}
+.choose .a{border-radius:var(--radius);padding:10px 14px;border:2px solid;font-weight:700}
+@media(max-width:640px){.choose .row{grid-template-columns:1fr}.choose .ar{transform:rotate(90deg);justify-self:center}}
+
+/* ---------- simulator ---------- */
+.sim{background:var(--panel);border:2px solid var(--ink);border-radius:var(--radius);padding:18px;margin:18px 0}
+.sim h4{margin-top:0}
+.sim-files{display:grid;gap:8px;margin-bottom:16px}
+.sim-file{display:grid;grid-template-columns:5.5rem 1fr auto;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:8px}
+.sim-file .nm{font-family:"Cascadia Mono","SF Mono",Consolas,monospace;font-weight:700}
+.sim-file button{font:inherit;font-size:.85rem;padding:5px 12px;border-radius:8px;border:2px solid var(--ink);background:var(--panel);color:var(--ink);cursor:pointer}
+.sim-file button:hover{background:var(--paper)}
+.sim-file.fixed{background:var(--repo-bg);border-color:var(--repo)}
+.sim fieldset{border:1px solid var(--line);border-radius:8px;margin:0 0 16px;padding:8px 12px}
+.sim legend{font-weight:700;padding:0 6px}
+.sim label{display:block;padding:6px 4px;cursor:pointer}
+.sim label input{margin-right:8px}
+.sim-out{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:640px){.sim-out{grid-template-columns:1fr}.sim-file{grid-template-columns:1fr}}
+.sim-col{border-radius:8px;padding:10px 12px;border:2px solid}
+.sim-col h5{margin:0 0 6px;font-size:.95rem}
+.sim-col ul{margin:0;padding-left:1.2em}
+.sim-col li{margin:2px 0}
+.sim-col.in{background:var(--repo-bg);border-color:var(--repo)}
+.sim-col.rest{background:var(--tree-bg);border-color:var(--tree)}
+.sim-note{margin-top:12px;padding:10px 12px;border-radius:8px;background:var(--index-bg);border:2px solid var(--index)}
+.sim-cmdline{margin:0 0 12px}
+
+details{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:10px 16px;margin:12px 0}
+details summary{cursor:pointer;font-weight:700}
+details[open] summary{margin-bottom:8px}
+
+footer{padding:40px 0 70px;color:var(--ink-2);font-size:.88rem}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>Gitで「混ざった」「戻したい」を<br>自力で直せるようになる実践ガイド</h1>
+    <p class="lead">別ブランチ用の修正を置いたまま作業して、うっかり今のブランチにコミットしてしまう。そのあと何をすればいいかを、実際の作業の流れに沿って順番に説明します。この資料のコマンドはすべて Git 2.43.0 で実際に実行して動作を確認し、出力も実物を載せています。</p>
+    <p class="lead">手を動かして試したい人は、操作を重ねて試せる別ファイル <a href="git-simulator.html"><b>git-simulator.html（Git 操作シミュレーター）</b></a> も使ってください。</p>
+    <ul class="legend" aria-label="この資料の色の意味">
+      <li class="chip c-tree">作業ツリー <small>ふつうに編集している場所</small></li>
+      <li class="chip c-index">ステージ <small>次のコミットに入れる予定</small></li>
+      <li class="chip c-repo">コミット <small>確定した履歴</small></li>
+      <li class="chip c-danger">注意 <small>消える・戻せない</small></li>
+    </ul>
+  </div>
+</header>
+
+<nav class="toc" aria-label="目次">
+  <ul>
+    <li><a href="#ch-pre">前提</a></li>
+    <li><a href="#ch0">結論</a></li>
+    <li><a href="#ch1">1 土台</a></li>
+    <li><a href="#ch2">2 別作業が入った</a></li>
+    <li><a href="#ch3">3 混ざってコミットした</a></li>
+    <li><a href="#ch4">4 予防</a></li>
+    <li><a href="#ch5">5 やらかし復旧</a></li>
+    <li><a href="#ch6">6 調べるコマンド</a></li>
+    <li><a href="#ch7">7 早見表</a></li>
+  </ul>
+</nav>
+
+<main>
+
+<!-- ============ 前提・結論 ============ -->
+<section class="ch" id="ch-pre">
+<div class="wrap">
+  <h2>この資料の前提：なぜ、こんなことを書いているのか</h2>
+
+  <div class="story"><b>もともとの作業スタイル</b>
+  1つのブランチで複数のファイルを編集している途中に、別のブランチで作業する必要が出ることがあります。そのとき、編集中のファイルは<u>コミットせずに放置したまま</u>別のブランチへ移り、そこで作業した分だけをコミットします。元のブランチへ戻ったら、放置していた変更を続きの作業に混ぜる。この資料は、この作業スタイルを前提にしています。</div>
+
+  <p>この作業スタイルには、次の3つの困りごとがあります。</p>
+  <ol class="plain">
+    <li><b>別ブランチ用の変更を、間違って今のブランチにコミットしてしまう。</b>「どのファイルが別用か」をずっと覚えておく必要があり、気を張り続けるのがつらい。</li>
+    <li><b>コミットしてしまったあとの直し方が分からない。</b>ファイルだけ外す、直前のコミットに混ぜる、メッセージを直す、Git管理から外す、といった操作のやり方が分からない。</li>
+    <li><b>stash を使えば済みそうだが、使い方と「何が入るのか」が分からず、使えていない。</b>stash は何個も作れるので、あとで「どれが何のため」か分からなくなりそうで不安。</li>
+  </ol>
+  <p>この資料は、この3つに答えるために、実際の作業の流れ（別作業が入る → うっかり混ざってコミット → 直す → 失敗したら戻す）の順に書いています。途中で出てくるコマンドは、すべて実際に実行して確認した結果です。</p>
+
+  <h3>想定している読者と環境</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>項目</th><th>内容</th></tr></thead>
+    <tbody>
+      <tr><td>読者</td><td><code>git add</code>・<code>git commit</code>・<code>git switch</code>・<code>git push</code> は使える。stash・amend・reset・rebase・reflog・worktree はよく分からない。</td></tr>
+      <tr><td>環境</td><td>ターミナルで Git を使う（GUIツールの操作は扱いません）。Git 2.43.0 で動作確認。ローカルでの作業が中心。</td></tr>
+      <tr><td>例の名前</td><td><code>Api.cs</code> / <code>Login.cs</code> / <code>Memo.cs</code> などのファイル名、<code>feature/login</code> などのブランチ名は、説明用の例です。</td></tr>
+      <tr><td>扱わないこと</td><td>プルリクエスト、マージやrebaseの詳しい仕組み、サブモジュール。</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>最低限の言葉</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>言葉</th><th>意味</th></tr></thead>
+    <tbody>
+      <tr><td>未コミットの変更</td><td>ファイルを編集したが、まだ <code>git commit</code> していない変更。</td></tr>
+      <tr><td>追跡済み／未追跡</td><td>Gitが管理しているファイルを「追跡済み」、新しく作ってまだ <code>git add</code> していないファイルを「未追跡」と呼びます。</td></tr>
+      <tr><td>ステージ</td><td>「次のコミットに入れる予定」の変更を置く場所（<code>git add</code> で入る）。第1章で図解します。</td></tr>
+      <tr><td>HEAD</td><td>今いるブランチの最新コミットを指す目印。<code>HEAD~</code> はその1つ前。</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>この資料の読み方</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>いま困っていること</th><th>読む場所</th></tr></thead>
+    <tbody>
+      <tr><td>コマンドの意味や、<code>git status -s</code> の見方が分からない</td><td><a href="#ch1">第1章</a></td></tr>
+      <tr><td>別ブランチの作業が入った。stash / worktree を使うか迷っている</td><td><a href="#ch2">第2章</a></td></tr>
+      <tr><td>もう混ざってコミットしてしまった</td><td><a href="#ch3">第3章</a></td></tr>
+      <tr><td>そもそも混ざらないようにしたい</td><td><a href="#ch4">第4章</a></td></tr>
+      <tr><td>操作に失敗して、元に戻したい</td><td><a href="#ch5">第5章</a></td></tr>
+      <tr><td>管理しているファイルの一覧を見たい・探したい</td><td><a href="#ch6">第6章</a></td></tr>
+      <tr><td>コマンドだけ素早く知りたい</td><td><a href="#ch7">第7章（早見表）</a></td></tr>
+      <tr><td>実際に操作を組み合わせて試したい</td><td><a href="git-simulator.html">git-simulator.html</a></td></tr>
+    </tbody>
+  </table></div>
+</div>
+</section>
+
+<section class="ch" id="ch0">
+<div class="wrap">
+  <h2>先に結論：3つの困りごとへの答え</h2>
+  <div class="answers">
+    <div class="a"><span class="n">1</span><div>
+      <p><b>困りごと1：「未コミットのまま別ブランチへ持ち越す」運用は、動きますが事故りやすいです。</b></p>
+      <p>「どれが別ブランチ用か」を頭で覚えておく必要があるのが原因です。別用の変更を <code class="i">stash</code> か <b>WIPコミット</b> で預けるか、<code class="i">git worktree</code> で別フォルダにしてしまうと、覚えておく必要がなくなります。コミットするときは <code class="i">git commit -m "..." -- ファイル名</code> で名指しすると、置いてあるファイルは混ざりません。→ <a href="#ch2">第2章</a>・<a href="#ch4">第4章</a></p></div></div>
+    <div class="a"><span class="n">2</span><div>
+      <p><b>困りごと3：stash で基本的にはOKです。ただし「全部入る」わけではありません。</b></p>
+      <p><code class="i">git stash push -m "メモ" -- ファイル名</code> で、<b>ファイルを指定して預けられます</b>。新規ファイルは <code class="i">-u</code> も必要です。すでにコミットしたものは stash に入りません。戻すときに、戻す先で同じファイルが変わっていると衝突しますが、stash は残るので失われません。→ <a href="#stash-scope">2-3b</a></p></div></div>
+    <div class="a"><span class="n">3</span><div>
+      <p><b>困りごと2：混ざったファイルは、コミットから外せます。</b></p>
+      <p><code class="i">git reset HEAD~ -- ファイル名</code> のあと <code class="i">git commit --amend --no-edit</code>。手元のファイルの中身は消えません。→ <a href="#ch3">3-5</a></p></div></div>
+    <div class="a"><span class="n">4</span><div>
+      <p><b>直前のコミットに混ぜる・メッセージを直す・Git管理から外す。</b></p>
+      <p>混ぜる：<code class="i">git commit --amend --no-edit</code>。メッセージ：<code class="i">git commit --amend --only -m "新"</code>。管理から外す：<code class="i">git rm --cached ファイル名</code>（<code class="i">.gitignore</code> に書くだけでは外れません）。→ <a href="#ch3">3-4・3-7・3-8</a></p></div></div>
+    <div class="a"><span class="n">5</span><div>
+      <p><b>worktree は、ブランチを何度も行き来するときや、元の作業に触れたくないときに使います。</b></p>
+      <p>ブランチごとに別フォルダで作業でき、切り替えも stash も要りません。ただし、<code class="i">.gitignore</code> 対象のファイルは新しいフォルダに引き継がれません。メリットとデメリットは <a href="#worktree">2-5</a> に詳しく書きました。</p></div></div>
+    <div class="a"><span class="n">6</span><div>
+      <p><b>失敗しても、コミットに関する操作は <code class="i">git reflog</code> から戻せます。</b></p>
+      <p>ただし<u>コミットしていない変更</u>は戻せません。危ない操作の前には stash か backup ブランチで退避します。→ <a href="#ch5">第5章</a></p></div></div>
+  </div>
+</div>
+</section>
+
+<!-- ============ 第1章 ============ -->
+<section class="ch" id="ch1">
+<div class="wrap">
+  <h2>第1章　土台：Gitの「3つの置き場所」と、画面の読み方</h2>
+  <h3>1-1　3つの置き場所</h3>
+  <p>これから出てくる操作は、ぜんぶこの図の中の「どこからどこへ動かすか」の話です。先にここだけ押さえてください。</p>
+
+  <figure>
+    <svg viewBox="0 0 760 262" role="img" aria-labelledby="f1t">
+      <title id="f1t">作業ツリー、ステージ、コミットの3つの置き場所と、コマンドによる移動</title>
+      <defs>
+        <marker id="m1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="ah"/></marker>
+        <marker id="m1d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="ah-dim"/></marker>
+      </defs>
+      <rect x="18" y="26" width="206" height="98" rx="12" class="s-tree"/>
+      <text x="121" y="56" text-anchor="middle" class="t-tree">作業ツリー</text>
+      <text x="121" y="80" text-anchor="middle" class="t-ink">エディタで編集する</text>
+      <text x="121" y="102" text-anchor="middle" class="t-dim">Login.cs Memo.cs …</text>
+
+      <rect x="277" y="26" width="206" height="98" rx="12" class="s-index"/>
+      <text x="380" y="56" text-anchor="middle" class="t-index">ステージ</text>
+      <text x="380" y="80" text-anchor="middle" class="t-ink">次のコミットに入る予定</text>
+      <text x="380" y="102" text-anchor="middle" class="t-dim">（別名 インデックス）</text>
+
+      <rect x="536" y="26" width="206" height="98" rx="12" class="s-repo"/>
+      <text x="639" y="56" text-anchor="middle" class="t-repo">コミット</text>
+      <text x="639" y="80" text-anchor="middle" class="t-ink">確定した履歴</text>
+      <text x="639" y="102" text-anchor="middle" class="t-dim">HEAD が最新を指す</text>
+
+      <path d="M226 75 H275" class="ln" marker-end="url(#m1)"/>
+      <text x="250" y="64" text-anchor="middle" class="t-cmd">git add</text>
+      <path d="M485 75 H534" class="ln" marker-end="url(#m1)"/>
+      <text x="510" y="64" text-anchor="middle" class="t-cmd">git commit</text>
+
+      <path d="M340 126 C340 168 190 168 190 128" class="ln-back" marker-end="url(#m1d)"/>
+      <text x="265" y="172" text-anchor="middle" class="t-cmd">git restore --staged</text>
+      <path d="M600 126 C600 176 440 176 440 128" class="ln-back" marker-end="url(#m1d)"/>
+      <text x="520" y="180" text-anchor="middle" class="t-cmd">git reset --soft HEAD~</text>
+      <path d="M680 126 C680 240 70 240 70 128" class="ln-back" marker-end="url(#m1d)"/>
+      <text x="375" y="236" text-anchor="middle" class="t-cmd">git reset HEAD~</text>
+    </svg>
+    <figcaption>実線は進める操作、破線は戻す操作。<b>git commit は「ステージにあるもの」だけをコミットします。</b>作業ツリーにあるだけの変更は、コミットに入りません。</figcaption>
+  </figure>
+
+  <h3 id="status-s">1-2　git status -s の読み方</h3>
+  <p><code class="i">git status</code> は「いまの状態」を表示するコマンドです。<code class="i">-s</code> は <code class="i">--short</code> の略で、同じ内容を<b>1ファイル1行の短い形式</b>で表示します。まず、同じ状態を2つの形式で見比べます。</p>
+  <div class="two">
+    <div><p class="cap">git status（長い形式）</p>
+      <div class="term"><div class="term-head"><span>ターミナル</span></div><pre><code><span class="l out">On branch main</span><span class="l out">Changes to be committed:</span><span class="l out">  (use "git restore --staged &lt;file&gt;..." to unstage)</span><span class="l out">	modified:   docs/README.md</span><span class="l out"></span><span class="l out">Changes not staged for commit:</span><span class="l out">  (use "git add &lt;file&gt;..." to update what will be committed)</span><span class="l out">  (use "git restore &lt;file&gt;..." to discard changes in working directory)</span><span class="l out">	modified:   src/Api/UserController.cs</span></code></pre></div></div>
+    <div><p class="cap">git status -s（短い形式）</p>
+      <div class="term"><div class="term-head"><span>ターミナル</span></div><pre><code><span class="l out"><span class="gr">M</span>  docs/README.md</span><span class="l out"> <span class="rd">M</span> src/Api/UserController.cs</span></code></pre></div>
+      <p class="cap">上の長い形式の「Changes to be committed（コミットされる予定）」が <b>1文字目</b>、「Changes not staged for commit（まだステージしていない）」が <b>2文字目</b> に対応します。</p></div>
+  </div>
+
+  <h4>行の見方：1文字目と2文字目は、別々の場所の状態</h4>
+  <figure>
+    <svg viewBox="0 0 760 352" role="img" aria-labelledby="fst">
+      <title id="fst">git status -s の1文字目はステージ、2文字目は作業ツリーの状態を表す</title>
+      <rect x="20" y="14" width="34" height="28" rx="6" class="s-index"/><text x="37" y="34" text-anchor="middle" class="t-mono">M</text>
+      <text x="66" y="34" class="t-ink">1文字目　＝　ステージの状態（次の git commit に入る予定か）</text>
+      <rect x="20" y="52" width="34" height="28" rx="6" class="s-tree"/><text x="37" y="72" text-anchor="middle" class="t-mono">M</text>
+      <text x="66" y="72" class="t-ink">2文字目　＝　作業ツリーの状態（編集したが、まだステージに入れていないか）</text>
+
+      <line x1="20" y1="96" x2="740" y2="96" stroke="var(--line)" stroke-width="2"/>
+
+      <!-- row1 M␣ -->
+      <rect x="20" y="108" width="34" height="32" rx="6" class="s-index"/><text x="37" y="132" text-anchor="middle" class="t-mono">M</text>
+      <rect x="58" y="108" width="34" height="32" rx="6" class="s-blank-tree"/>
+      <text x="108" y="132" class="t-mono">Login.cs</text>
+      <text x="290" y="126" class="t-ok">✔ 次のコミットに入る</text>
+      <text x="290" y="144" class="t-dim">ステージ済み。その後は編集していない</text>
+
+      <!-- row2 ␣M -->
+      <rect x="20" y="158" width="34" height="32" rx="6" class="s-blank-index"/>
+      <rect x="58" y="158" width="34" height="32" rx="6" class="s-tree"/><text x="75" y="182" text-anchor="middle" class="t-mono">M</text>
+      <text x="108" y="182" class="t-mono">Login.cs</text>
+      <text x="290" y="176" class="t-danger">✘ 次のコミットには入らない</text>
+      <text x="290" y="194" class="t-dim">編集しただけで、git add していない</text>
+
+      <!-- row3 MM -->
+      <rect x="20" y="208" width="34" height="32" rx="6" class="s-index"/><text x="37" y="232" text-anchor="middle" class="t-mono">M</text>
+      <rect x="58" y="208" width="34" height="32" rx="6" class="s-tree"/><text x="75" y="232" text-anchor="middle" class="t-mono">M</text>
+      <text x="108" y="232" class="t-mono">Login.cs</text>
+      <text x="290" y="226" class="t-ok">✔ ステージした版だけ入る</text>
+      <text x="290" y="244" class="t-dim">git add のあとで、さらに編集した（あとの編集は入らない）</text>
+
+      <!-- row4 A␣ -->
+      <rect x="20" y="258" width="34" height="32" rx="6" class="s-index"/><text x="37" y="282" text-anchor="middle" class="t-mono">A</text>
+      <rect x="58" y="258" width="34" height="32" rx="6" class="s-blank-tree"/>
+      <text x="108" y="282" class="t-mono">Memo.cs</text>
+      <text x="290" y="276" class="t-ok">✔ 次のコミットに入る</text>
+      <text x="290" y="294" class="t-dim">新規ファイルを git add した</text>
+
+      <!-- row5 ?? -->
+      <rect x="20" y="308" width="34" height="32" rx="6" class="s-neutral"/><text x="37" y="332" text-anchor="middle" class="t-mono">?</text>
+      <rect x="58" y="308" width="34" height="32" rx="6" class="s-neutral"/><text x="75" y="332" text-anchor="middle" class="t-mono">?</text>
+      <text x="108" y="332" class="t-mono">Memo.cs</text>
+      <text x="290" y="326" class="t-danger">✘ 次のコミットには入らない</text>
+      <text x="290" y="344" class="t-dim">未追跡。Gitはまだこのファイルを知らない</text>
+    </svg>
+    <figcaption>四角の実線は「その場所に変更あり」、破線は「変更なし（空白）」です。</figcaption>
+  </figure>
+
+  <div class="box ok"><span class="t">覚えるのはこれだけ</span>
+  <p><b>次の <code class="i">git commit</code> に入るのは、「1文字目」に文字があるファイルだけ。</b>1文字目が空白（または <code class="i">??</code>）のファイルは、コミットに入りません。</p></div>
+
+  <h4>色について：資料の色と、ターミナルの色は別物です</h4>
+  <p>この資料では「ステージ＝琥珀色、作業ツリー＝青」と色分けしていますが、<b>実際のターミナルの <code class="i">git status -s</code> は別の色</b>で表示されます（実際に色付きで出力して確認しました）。</p>
+  <div class="tbl"><table>
+    <thead><tr><th>場所</th><th>この資料の色</th><th>ターミナルの色</th></tr></thead>
+    <tbody>
+      <tr><td>1文字目（ステージ）</td><td><span class="chip c-index">琥珀色</span></td><td><b style="color:#2f9e63">緑</b></td></tr>
+      <tr><td>2文字目（作業ツリー）</td><td><span class="chip c-tree">青</span></td><td><b style="color:#d64545">赤</b></td></tr>
+      <tr><td><code>??</code>（未追跡）</td><td>—</td><td><b style="color:#d64545">赤</b>（2文字とも）</td></tr>
+    </tbody>
+  </table></div>
+  <div class="term"><div class="term-head"><span>ターミナルの表示イメージ</span></div><pre><code><span class="l out"><span class="gr">M</span>  docs/README.md          <span class="cm">← 緑のM＝ステージ済み（次のコミットに入る）</span></span><span class="l out"> <span class="rd">M</span> src/Api/UserController.cs  <span class="cm">← 赤のM＝未ステージ（入らない）</span></span><span class="l out"><span class="rd">??</span> Memo.cs                  <span class="cm">← 赤の??＝未追跡（入らない）</span></span></code></pre></div>
+  <p>ターミナルでは、<b>緑＝ステージ済み（コミットされる）／赤＝まだ（コミットされない）</b>と覚えると分かりやすいです。「赤＝危険」という意味ではなく、「まだステージしていない」という意味です。</p>
+
+  <h4>文字の意味</h4>
+  <div class="tbl"><table>
+    <thead><tr><th>表示（␣は空白1文字）</th><th>意味</th><th>次のコミットに入る？</th></tr></thead>
+    <tbody>
+      <tr><td><code>␣M</code></td><td>編集したが、ステージしていない</td><td>入らない</td></tr>
+      <tr><td><code>M␣</code></td><td>ステージ済み（その後は編集していない）</td><td>入る</td></tr>
+      <tr><td><code>MM</code></td><td>ステージ済みで、その後さらに編集した</td><td>ステージした版だけ入る</td></tr>
+      <tr><td><code>A␣</code></td><td>新規ファイルをステージ済み</td><td>入る</td></tr>
+      <tr><td><code>D␣</code></td><td>「削除する」をステージ済み</td><td>削除として入る</td></tr>
+      <tr><td><code>␣D</code></td><td>ファイルを消したが、ステージしていない</td><td>入らない</td></tr>
+      <tr><td><code>??</code></td><td>未追跡（Gitがまだ知らない新規ファイル）</td><td>入らない</td></tr>
+      <tr><td><code>UU</code></td><td>衝突している（マージ・stash の戻し中など）</td><td>直すまでコミット不可</td></tr>
+    </tbody>
+  </table></div>
+  <p class="cap">文字は頭文字です。M＝Modified（変更）、A＝Added（追加）、D＝Deleted（削除）、U＝Unmerged（衝突）。</p>
+
+  <h3 id="opt">1-3　コマンドの後ろの <code class="i">-s</code> や <code class="i">--stat</code> って何？</h3>
+  <p><code class="i">-s</code> や <code class="i">--stat</code> のような、コマンドの後ろに付ける指示を<b>オプション</b>と呼びます。出力の形や、コマンドの動き方を変えます。</p>
+
+  <h4>オプションの書き方</h4>
+  <ul class="plain">
+    <li><b>短い形</b>：ハイフン1つ＋1文字（<code class="i">-s</code>、<code class="i">-m</code>）。</li>
+    <li><b>長い形</b>：ハイフン2つ＋単語（<code class="i">--short</code>、<code class="i">--message</code>）。</li>
+    <li>同じ意味の短い形と長い形があることが多く、<code class="i">git status -s</code> と <code class="i">git status --short</code> は同じです。</li>
+  </ul>
+
+  <div class="box warn"><span class="t">同じ文字でも、コマンドが違うと意味が違います</span>
+  <div class="tbl"><table>
+    <thead><tr><th>コマンド</th><th><code>-s</code> の意味</th></tr></thead>
+    <tbody>
+      <tr><td><code>git status -s</code></td><td><code>--short</code>（短い形式で表示）</td></tr>
+      <tr><td><code>git show -s</code>（<code>git diff -s</code> なども同じ）</td><td><code>--no-patch</code>（差分を表示しない）</td></tr>
+      <tr><td><code>git ls-files -s</code></td><td><code>--stage</code>（ステージの情報を表示）</td></tr>
+    </tbody>
+  </table></div>
+  <p>なので「<code class="i">-s</code> はこういう意味」と決め打ちせず、<b>コマンドごとに意味を確認する</b>のが安全です（<code class="i">git コマンド名 --help</code> で確認できます）。</p></div>
+
+  <h4><code class="i">--stat</code> は <code class="i">-s</code> とは別物です</h4>
+  <p><code class="i">--stat</code> は「<b>どのファイルが何行変わったか</b>の一覧表」を出すオプションです（statistics＝統計の略）。<code class="i">git status -s</code> の <code class="i">-s</code> とは無関係です。同じ状態で実際に出力を比べます。</p>
+  <div class="term"><div class="term-head"><span>ターミナル（直前のコミット「second」を調べる）</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git show --stat --format='%h %s'</span><span class="l out">dfac41f second</span><span class="l out"></span><span class="l out"> Memo.cs        | 1 +</span><span class="l out"> docs/README.md | 1 +</span><span class="l out"> 2 files changed, 2 insertions(+)</span><span class="l cm"># --stat：ファイルごとの変更行数の表</span><span class="l cmd">git show -s --format='%h %s'</span><span class="l out">dfac41f second</span><span class="l cm"># -s（show では --no-patch）：差分を出さず、見出しだけ</span><span class="l cmd">git show --name-only --format='%h %s'</span><span class="l out">dfac41f second</span><span class="l out"></span><span class="l out">Memo.cs</span><span class="l out">docs/README.md</span><span class="l cm"># --name-only：ファイル名だけ</span><span class="l cmd">git show --name-status --format='%h %s'</span><span class="l out">dfac41f second</span><span class="l out"></span><span class="l out">A	Memo.cs</span><span class="l out">M	docs/README.md</span><span class="l cm"># --name-status：A（追加）/ M（変更）/ D（削除）付きのファイル名</span></code></pre></div>
+  <p><code class="i">--format='%h %s'</code> は出力の書式の指定で、<code class="i">%h</code> は短縮したコミットID、<code class="i">%s</code> はコミットメッセージの1行目です。この資料では出力を短くするために付けています。</p>
+  <p><code class="i">--stat</code> は、<code class="i">git diff --stat</code>（まだコミットしていない変更の一覧）でも使えます。</p>
+  <div class="term"><div class="term-head"><span>ターミナル</span></div><pre><code><span class="l cmd">git diff --stat</span><span class="l out"> src/Api/UserController.cs | 1 +</span><span class="l out"> 1 file changed, 1 insertion(+)</span></code></pre></div>
+
+  <h4>この資料に出てくる主なオプション</h4>
+  <div class="tbl"><table class="ref">
+    <thead><tr><th>オプション</th><th>意味</th><th>出てくる例</th></tr></thead>
+    <tbody>
+      <tr><td><code>-m "文"</code></td><td>メッセージをその場で指定（message）</td><td><code>git commit -m "fix"</code></td></tr>
+      <tr><td><code>-a</code></td><td>追跡済みファイルの変更を、全部自動でステージしてからコミット（all）</td><td><code>git commit -a -m "fix"</code></td></tr>
+      <tr><td><code>-A</code></td><td>新規・変更・削除をすべてステージ</td><td><code>git add -A</code></td></tr>
+      <tr><td><code>-u</code></td><td>stash で、未追跡の新規ファイルも預ける（untracked）</td><td><code>git stash push -u</code></td></tr>
+      <tr><td><code>-p</code></td><td>変更を1か所ずつ選ぶ（patch）</td><td><code>git add -p</code></td></tr>
+      <tr><td><code>-i</code></td><td>対話的に編集する（interactive）</td><td><code>git rebase -i HEAD~3</code></td></tr>
+      <tr><td><code>--amend</code></td><td>直前のコミットを作り直して置き換える</td><td><code>git commit --amend</code></td></tr>
+      <tr><td><code>--no-edit</code></td><td>メッセージは変えない</td><td><code>git commit --amend --no-edit</code></td></tr>
+      <tr><td><code>--soft</code> / <code>--hard</code></td><td>reset の範囲。soft＝コミットだけ戻す、hard＝作業ツリーまで戻す（何も付けないと mixed）</td><td><code>git reset --soft HEAD~1</code></td></tr>
+      <tr><td><code>--staged</code></td><td>ステージ側を対象にする</td><td><code>git restore --staged file</code></td></tr>
+      <tr><td><code>--cached</code></td><td>手元のファイルは残し、Gitの管理だけ外す</td><td><code>git rm --cached file</code></td></tr>
+      <tr><td><code>--</code>（ハイフン2つだけ）</td><td>「ここから先はファイル名」という区切り</td><td><code>git commit -m "fix" -- Api.cs</code></td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="box warn"><span class="t">書き換え系の操作は「まだ push していないコミット」だけ</span>
+  <p><code class="i">--amend</code> / <code class="i">reset</code> / <code class="i">rebase</code> はコミットのIDを作り変えます。push 済みのコミットに使うと、他の人の履歴とずれます。push 済みの場合は第3章の最後を見てください。</p></div>
+</div>
+</section>
+
+<!-- ============ 第2章 ============ -->
+<section class="ch" id="ch2">
+<div class="wrap">
+  <h2>第2章　場面①：作業の途中で、別ブランチの急ぎ作業が入った</h2>
+
+  <div class="story"><b>状況</b>
+  <code class="i">feature/login</code> で <code class="i">Login.cs</code> を編集し、<code class="i">Memo.cs</code>（新規メモ）も作った。まだコミットする段階ではない。そこへ「先に別ブランチで Api.cs を直して」と依頼が来た。</div>
+
+  <h3>2-1　いまの運用（そのまま持ち越し）で何が起きているか</h3>
+  <p>「放置している」ように見えますが、実際には<b>変更が作業ツリーごと一緒に付いてきている</b>だけです。変更はどのブランチのものでもありません。</p>
+
+  <figure>
+    <svg viewBox="0 0 760 210" role="img" aria-labelledby="f2t">
+      <title id="f2t">ブランチを切り替えても、未コミットの変更はそのまま付いてくる</title>
+      <defs>
+        <marker id="m2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="ah"/></marker>
+      </defs>
+      <text x="170" y="22" text-anchor="middle" class="t-ink" font-weight="700">切り替える前</text>
+      <rect x="40" y="36" width="260" height="46" rx="10" class="s-repo"/>
+      <text x="170" y="65" text-anchor="middle" class="t-repo">feature/login ← 今ここ</text>
+      <rect x="40" y="108" width="260" height="70" rx="10" class="s-dash-index"/>
+      <text x="170" y="136" text-anchor="middle" class="t-index">未コミットの変更</text>
+      <text x="170" y="160" text-anchor="middle" class="t-dim">Login.cs　Memo.cs</text>
+
+      <path d="M318 107 H442" class="ln" marker-end="url(#m2)"/>
+      <text x="380" y="96" text-anchor="middle" class="t-cmd">git switch main</text>
+
+      <text x="590" y="22" text-anchor="middle" class="t-ink" font-weight="700">切り替えた後</text>
+      <rect x="460" y="36" width="260" height="46" rx="10" class="s-repo"/>
+      <text x="590" y="65" text-anchor="middle" class="t-repo">main ← 今ここ</text>
+      <rect x="460" y="108" width="260" height="70" rx="10" class="s-dash-index"/>
+      <text x="590" y="136" text-anchor="middle" class="t-index">未コミットの変更（そのまま）</text>
+      <text x="590" y="160" text-anchor="middle" class="t-dim">Login.cs　Memo.cs</text>
+      <text x="380" y="202" text-anchor="middle" class="t-danger">この状態で git add . や commit -a をすると、別ブランチ用の変更が混ざる</text>
+    </svg>
+    <figcaption>ブランチを移っても、変更は同じ場所に居続けます。</figcaption>
+  </figure>
+
+  <p>触っていないファイルなら、切り替えはそのまま成功します。</p>
+  <div class="term"><div class="term-head"><span>ターミナル（Api.cs だけ編集している状態）</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git switch main</span><span class="l out">M	Api.cs</span><span class="l out">Switched to branch 'main'</span></code></pre></div>
+
+  <p>一方、移動先のブランチで同じファイルが違う内容になっていると、Gitが止めてくれます。</p>
+  <div class="term"><div class="term-head"><span>ターミナル（Login.cs が main 側でも変更されている場合）</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git switch main</span><span class="l bad">error: Your local changes to the following files would be overwritten by checkout:</span><span class="l bad">	Login.cs</span><span class="l bad">Please commit your changes or stash them before you switch branches.</span><span class="l bad">Aborting</span></code></pre></div>
+
+  <div class="box warn"><span class="t">この運用の弱点</span>
+  <ul class="plain">
+    <li>「これは別ブランチ用」を頭で覚えておく必要がある</li>
+    <li><code class="i">git add .</code> や <code class="i">git commit -a</code> を打った瞬間に混ざる</li>
+    <li>戻ってきたとき、同じファイルを触っていると衝突する</li>
+  </ul></div>
+
+  <h3>2-2　代わりに何を使うか</h3>
+  <p>やりたいことは「変更をどこかに預けて、ブランチを移って、戻ってきたら受け取る」です。預け先が違う3つの方法があります。</p>
+
+  <div class="choose">
+    <div class="row"><div class="q">数分〜その日のうちに戻ってくる</div><span class="ar">→</span><div class="a c-tree">stash（変更を棚に預ける）</div></div>
+    <div class="row"><div class="q">半日〜数日。そのブランチに戻るのを忘れそう</div><span class="ar">→</span><div class="a c-repo">WIPコミット（ブランチの履歴に預ける）</div></div>
+    <div class="row"><div class="q">何度も行き来する／元の作業に手を触れたくない</div><span class="ar">→</span><div class="a c-index">git worktree（別フォルダで作業する）</div></div>
+  </div>
+
+  <h3>2-3　手順A：stash で預ける</h3>
+  <p>stash は、未コミットの変更を一時的にしまっておく棚です。棚は<b>全ブランチ共通で1つ</b>なので、メッセージを付けておくと後で迷いません。</p>
+  <ol class="steps">
+    <li><span class="h">変更を預ける（新規ファイルも一緒に）</span>
+      <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git stash push -u -m "認証の途中"</span><span class="l out">Saved working directory and index state On feature/login: 認証の途中</span></code></pre></div>
+      <p><code class="i">-u</code> は未追跡ファイル（Memo.cs）も預けるオプション、<code class="i">-m</code> はメモです。ブランチ名は Git が自動で記録します。この書き方は「未コミットの変更を全部」預けます。<b>別作業用のファイルだけ預けたい場合</b>は、次の 2-3b を見てください。</p></li>
+    <li><span class="h">別ブランチで作業してコミットする</span>
+      <p>ここは普段どおりです。作業ツリーがきれいなので、何を <code class="i">git add</code> してもよく、混ざる心配がありません。</p></li>
+    <li><span class="h">元のブランチに戻って、預けた変更を確認する</span>
+      <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git switch feature/login</span><span class="l cmd">git stash list</span><span class="l out">stash@{0}: On feature/login: 認証の途中</span></code></pre></div></li>
+    <li><span class="h">受け取る（棚には残したまま）</span>
+      <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git stash apply</span></code></pre></div></li>
+    <li><span class="h">元に戻ったことを確認してから、棚を空ける</span>
+      <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git status -s</span><span class="l cmd">git stash drop</span></code></pre></div></li>
+  </ol>
+
+  <details>
+    <summary>stash でつまずきやすい点</summary>
+    <ul class="plain">
+      <li><b><code class="i">-u</code> を付け忘れると、新規ファイルは預けられません。</b>実際に <code class="i">git stash push -m "認証の途中"</code> だけで試すと、<span class="mono">?? Memo.cs</span> が作業ツリーに残りました。</li>
+      <li><code class="i">-m</code> なしでも使えますが、メモは <span class="mono">WIP on feature/login: f2732e0 init</span> のように「ブランチ名＋直前のコミット名」になり、中身のヒントにはなりません。</li>
+      <li><code class="i">git stash pop</code> は「受け取る＋棚から削除」を一度にやります。慣れるまでは <code class="i">apply</code> → 確認 → <code class="i">drop</code> の方が安全です。</li>
+      <li>受け取るときに衝突しても、棚の中身は残っています。</li>
+      <li><code class="i">drop</code> し間違えたら、直後なら画面に出た <span class="mono">Dropped refs/stash@{0} (ハッシュ)</span> のハッシュで <code class="i">git stash apply ハッシュ</code> して戻せます。</li>
+      <li>特定のファイルだけ預けるなら <code class="i">git stash push -m "メモ" -- Login.cs</code>。</li>
+    </ul>
+  </details>
+
+  <h3 id="stash-scope">2-3b　stash には何が入る？　ファイルを指定できる？</h3>
+  <p>先に答えると、<b>ファイルを指定して預けられます</b>。何も指定しないと「追跡済みファイルの未コミットの変更を全部」預けます。</p>
+
+  <div class="tbl"><table>
+    <thead><tr><th>状態</th><th>何も指定しないと</th><th>入れる方法</th></tr></thead>
+    <tbody>
+      <tr><td>追跡済みファイルの、未ステージの変更</td><td>入る</td><td>—</td></tr>
+      <tr><td>ステージ済みの変更</td><td>入る</td><td>—</td></tr>
+      <tr><td>新規の未追跡ファイル</td><td><b>入らない</b></td><td><code>-u</code> を付ける</td></tr>
+      <tr><td><b>すでにコミットしたもの</b></td><td><b>入らない</b>（stash は「未コミットの変更」だけを預かる）</td><td>—</td></tr>
+      <tr><td><code>.gitignore</code> の対象</td><td>入らない</td><td><code>-a</code> を付ける</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>ファイルを指定して預ける</h4>
+  <p>状況：<code class="i">Api.cs</code> と <code class="i">Login.cs</code> を編集済み、<code class="i">Memo.cs</code> は新規。このうち別作業用の <code class="i">Login.cs</code> だけを預けます。</p>
+  <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git status -s</span><span class="l out"> M Api.cs</span><span class="l out"> M Login.cs</span><span class="l out">?? Memo.cs</span><span class="l cmd">git stash push -m "Login.csだけ" -- Login.cs</span><span class="l out">Saved working directory and index state On feature/login: Login.csだけ</span><span class="l cmd">git status -s</span><span class="l out"> M Api.cs</span><span class="l out">?? Memo.cs</span><span class="l good">← Api.cs は手元に残ったまま、Login.cs だけが預けられた</span><span class="l cmd">git stash show --stat</span><span class="l out"> Login.cs | 2 +-</span><span class="l out"> 1 file changed, 1 insertion(+), 1 deletion(-)</span></code></pre></div>
+  <p>複数のファイルと新規ファイルを一緒に預けるなら、<code class="i">-u</code> を付けてファイル名を並べます。</p>
+  <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git stash push -u -m "Login.csとMemo.cs" -- Login.cs Memo.cs</span><span class="l out">Saved working directory and index state On feature/login: Login.csとMemo.cs</span><span class="l cmd">git status -s</span><span class="l out"> M Api.cs</span></code></pre></div>
+  <div class="box warn"><span class="t">新規ファイルをパス指定するときは -u が必須です</span>
+  <div class="term"><div class="term-head"><span>ターミナル（-u を付けなかった場合）</span></div><pre><code><span class="l cmd">git stash push -m "メモだけ" -- Memo.cs</span><span class="l bad">error: pathspec ':(,prefix:0)Memo.cs' did not match any file(s) known to git</span><span class="l bad">Did you forget to 'git add'?</span></code></pre></div></div>
+  <p>ほかに、<code class="i">git stash push --staged</code>（Git 2.35 以降）は<b>ステージ済みの変更だけ</b>を預けます（実際に確認済み）。先に預けたいファイルだけ <code class="i">git add</code> して使う方法です。</p>
+
+  <h4>「全部預けたあとで混乱しない？」を実際に確かめる</h4>
+  <p>心配なのは、<b>全部預けたあと、同じブランチで同じファイルをコミットしてから戻すと、わけが分からなくならないか</b>という点です。まず、stash が何を預かるのかを整理します。</p>
+  <ul class="plain">
+    <li>stash に入るのは、<b>預けた時点の未コミットの変更だけ</b>です。すでにコミットしたファイルを巻き込むことはありません。</li>
+    <li>戻すときは、「預けたときの変更」を<b>今のファイルに合流させる</b>処理になります。</li>
+    <li>困るのは、<b>預けている間に、同じファイルの同じ箇所が別の内容に変わった</b>場合です。この場合、Gitは黙って壊さず、<b>衝突</b>として教えてくれます。</li>
+  </ul>
+  <p>実際にやってみます。<code class="i">Login.cs</code> と <code class="i">Api.cs</code> を含めて全部預けたあと、<code class="i">Login.cs</code> を別の内容でコミットし、そのあと戻します。</p>
+  <div class="term"><div class="term-head"><span>ターミナル（同じブランチで戻す場合）</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git stash push -m "all"</span><span class="l cm"># Login.cs と Api.cs の変更が預けられる（Memo.cs は -u なしなので手元に残る）</span><span class="l cm"># ここで Login.cs を別の内容に編集して、そのままコミットしてしまった</span><span class="l cmd">git commit -a -m "Login.cs を別の内容でコミットしちゃった"</span><span class="l cmd">git stash apply</span><span class="l bad">Auto-merging Login.cs</span><span class="l bad">CONFLICT (content): Merge conflict in Login.cs</span><span class="l cmd">git status -s</span><span class="l out"><span class="gr">M</span>  Api.cs</span><span class="l out"><span class="rd">UU</span> Login.cs</span><span class="l out"><span class="rd">??</span> Memo.cs</span><span class="l cmd">git stash list</span><span class="l out">stash@{0}: On feature/login: all</span><span class="l good">← stash は残っている（失われていない）</span></code></pre></div>
+  <p>結果の読み方です。</p>
+  <ul class="plain">
+    <li><code class="i">Api.cs</code>：衝突せずに戻り、ステージ済み（緑のM）になった。</li>
+    <li><code class="i">Login.cs</code>：<code class="i">UU</code>＝衝突。コミットした内容と預けた内容が食い違っている。</li>
+    <li><b>stash は消えていない</b>ので、やり直しも、あとで戻すこともできます。</li>
+  </ul>
+  <p>なお、<b>別の行の変更どうしなら、自動で合流して衝突しません</b>（実際に、同じファイルの別の行を変更した場合は、両方の変更が入って戻りました）。</p>
+
+  <h4>別のブランチで戻す場合</h4>
+  <p>同じ仕組みです。戻す先のブランチで、<b>そのファイルが違う内容になっているかどうか</b>で結果が決まります。</p>
+  <div class="tbl"><table>
+    <thead><tr><th>戻す先の状態</th><th>結果（実際に確認）</th></tr></thead>
+    <tbody>
+      <tr><td>預けたファイルが、戻す先でも同じ内容</td><td>そのまま戻る（<code>On branch other / M Login.cs</code>）</td></tr>
+      <tr><td>預けたファイルが、戻す先で別の内容に変わっている</td><td>衝突（<code>CONFLICT (content): Merge conflict in Login.cs</code> → <code>UU Login.cs</code>）。stash は残る</td></tr>
+      <tr><td>預けたファイルに、戻す先で未コミットの変更がある</td><td>Gitが止める（<code>error: Your local changes to the following files would be overwritten by merge</code> → Aborting）。何も変わらない</td></tr>
+    </tbody>
+  </table></div>
+  <p>stash は「どのブランチ用か」を自動では守りません。<code class="i">git stash list</code> に <span class="mono">On feature/login: ...</span> と元のブランチ名は出ますが、別のブランチでも戻せてしまいます。意図したブランチで戻すのは自分で確認します。</p>
+
+  <h4>混乱を避けるコツ</h4>
+  <ol class="plain">
+    <li><b>預けるのは「別作業用のファイルだけ」にする</b>（<code class="i">-- ファイル名</code> を付ける）。今の作業のファイルが巻き込まれません。</li>
+    <li><b>戻す前に中身を確認する</b>：<code class="i">git stash show -p</code> で差分が見られます。</li>
+    <li><b>長く預けっぱなしにしない。</b>数日以上なら WIPコミットの方が、ブランチに紐づいて迷子になりません。</li>
+    <li>メモ（<code class="i">-m</code>）には「ブランチ名: 内容」を書いておく。</li>
+  </ol>
+  <details>
+    <summary>衝突したときの対処</summary>
+    <ol class="plain">
+      <li><code class="i">git status -s</code> で <code class="i">UU</code> のファイルを確認する。</li>
+      <li>そのファイルを開き、<code class="i">&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code> ・ <code class="i">=======</code> ・ <code class="i">&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code> で囲まれた部分を、残したい内容に直して、これらの記号を消す。</li>
+      <li><code class="i">git add ファイル名</code> で「解決した」と伝える。</li>
+      <li>stash は残っているので、不要になったら <code class="i">git stash drop</code>。</li>
+    </ol>
+    <p><b>適用そのものをやめたい場合：</b><code class="i">git reset --hard</code> で、戻す前の状態に戻れます。stash は残るので、預けた変更は失われません。ただし <code class="i">reset --hard</code> は未コミットの変更を消す操作です。戻す前に <code class="i">git status</code> を見て、ほかに未コミットの変更がないことを確認してから実行します（stash の適用は、同じファイルに未コミットの変更があると実行されないため、通常は適用の前後でほかの変更は増えていません）。</p>
+  </details>
+
+  <h3>2-4　手順B：WIPコミットで預ける</h3>
+  <p>変更を<b>そのブランチの履歴</b>に仮のコミットとして置いておく方法です。他のブランチに混ざりようがなく、<code class="i">git log</code> に「WIP」と見えるので、何のための退避か一目で分かります。</p>
+  <ol class="steps">
+    <li><span class="h">全部まとめて仮コミットする</span>
+      <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git add -A</span><span class="l cmd">git commit -m "WIP: 認証の途中"</span><span class="l out">[feature/login c6ded77] WIP: 認証の途中</span><span class="l out"> 2 files changed, 2 insertions(+)</span><span class="l out"> create mode 100644 Memo.cs</span></code></pre></div></li>
+    <li><span class="h">別ブランチへ移って作業する</span>
+      <p><code class="i">git switch main</code> など。作業ツリーは空なので、普通にコミットできます。</p></li>
+    <li><span class="h">戻ってきたら、仮コミットだけ取り消す</span>
+      <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git switch feature/login</span><span class="l cmd">git reset HEAD~1</span><span class="l out">Unstaged changes after reset:</span><span class="l out">M	Login.cs</span><span class="l cmd">git status -s</span><span class="l out"> M Login.cs</span><span class="l out">?? Memo.cs</span></code></pre></div>
+      <p>コミットだけが消え、ファイルの中身は作業ツリーに残ります。Memo.cs は未追跡に戻ります。</p></li>
+  </ol>
+  <div class="box danger"><span class="t">WIPコミットのまま push しないでください</span>
+  <p>戻し忘れ防止は <code class="i">git log --oneline</code> で「WIP」が見えるかどうか。見えたら未処理です。</p></div>
+
+  <h3 id="worktree">2-5　手順C：worktree で別フォルダにする</h3>
+
+  <h4>worktree とは</h4>
+  <p>1つのリポジトリ（<code class="i">.git</code>）を共有したまま、<b>作業ツリー（ファイルを編集するフォルダ）を複数持つ</b>機能です。ブランチごとに別のフォルダを開けるので、ブランチの切り替えそのものが要らなくなります。</p>
+  <figure>
+    <svg viewBox="0 0 760 250" role="img" aria-labelledby="f3t">
+      <title id="f3t">1つのリポジトリを、ブランチごとに別フォルダで開く</title>
+      <rect x="30" y="20" width="300" height="100" rx="12" class="s-tree"/>
+      <text x="180" y="52" text-anchor="middle" class="t-tree">~/work/myrepo</text>
+      <text x="180" y="76" text-anchor="middle" class="t-ink">feature/login（作業中）</text>
+      <text x="180" y="100" text-anchor="middle" class="t-dim">未コミットの変更はそのまま</text>
+      <rect x="430" y="20" width="300" height="100" rx="12" class="s-tree"/>
+      <text x="580" y="52" text-anchor="middle" class="t-tree">~/work/myrepo-hotfix</text>
+      <text x="580" y="76" text-anchor="middle" class="t-ink">hotfix/urgent（急ぎの作業）</text>
+      <text x="580" y="100" text-anchor="middle" class="t-dim">ここで編集・コミットする</text>
+      <rect x="150" y="162" width="460" height="74" rx="12" class="s-repo"/>
+      <text x="380" y="192" text-anchor="middle" class="t-repo">共有される .git（履歴・ブランチ・stash）</text>
+      <text x="380" y="218" text-anchor="middle" class="t-dim">コミットすると、もう片方のフォルダからも見える</text>
+      <path d="M180 122 V150 H260 V160" class="ln-back"/>
+      <path d="M580 122 V150 H500 V160" class="ln-back"/>
+    </svg>
+    <figcaption>フォルダごとに別々なのは「作業ツリー・HEAD・ステージ」。履歴やブランチ、stash は共有です。</figcaption>
+  </figure>
+
+  <h4>clone との違い</h4>
+  <div class="tbl"><table>
+    <thead><tr><th></th><th>別フォルダに <code>git clone</code></th><th><code>git worktree add</code></th></tr></thead>
+    <tbody>
+      <tr><td>履歴</td><td>丸ごとコピーして独立</td><td>共有（コピーしない）</td></tr>
+      <tr><td>別フォルダでコミットした内容</td><td>push / fetch しないと届かない</td><td>すぐ同じリポジトリに入る</td></tr>
+      <tr><td>ディスク使用量</td><td>履歴の分だけ増える</td><td>作業ファイルの分だけ</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>どういうケースで使うか</h4>
+  <div class="tbl"><table>
+    <thead><tr><th>場面</th><th>worktree でどうなるか</th></tr></thead>
+    <tbody>
+      <tr><td>作業中に、急ぎの修正（hotfix）が入った</td><td>別フォルダで hotfix を作業。元のフォルダは何も触らずに済む</td></tr>
+      <tr><td>他の人のブランチをレビューするために動かしたい</td><td>レビュー用のフォルダを作って動かし、終わったら削除</td></tr>
+      <tr><td>長いビルドやテストを走らせながら、別の作業をしたい</td><td>ビルド中のフォルダと、作業用のフォルダを分けられる</td></tr>
+      <tr><td>2つのブランチの動きを見比べたい</td><td>エディタやIDEを2つのフォルダで並べて開ける</td></tr>
+      <tr><td>AIコーディングエージェントなどを、並行して複数走らせたい</td><td>それぞれ別フォルダ・別ブランチにすれば、互いのファイルを壊さない</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>便利なところ（メリット）</h4>
+  <ul class="plain">
+    <li><b>切り替えがゼロ。</b>stash も WIPコミットも要りません。</li>
+    <li><b>未コミットの変更が混ざりません。</b>フォルダが別なので、別ブランチ用の変更を間違えてコミットする余地がありません。</li>
+    <li><b>ビルドし直しが減ります。</b>ブランチを切り替えないので、<code class="i">bin</code> / <code class="i">obj</code> のようなビルド成果物が書き換わりません。</li>
+    <li>エディタやIDEを<b>別ウィンドウで並べて</b>開けます。</li>
+    <li>履歴は共有なので、clone より軽く、コミットもすぐ共有されます。</li>
+  </ul>
+
+  <h4>気をつけるところ（デメリット・制約）</h4>
+  <p>実際に動かして確認した挙動です。</p>
+  <div class="tbl"><table>
+    <thead><tr><th>制約</th><th>実際の挙動</th><th>対処</th></tr></thead>
+    <tbody>
+      <tr><td><b>同じブランチを2か所で開けない</b></td><td><span class="mono">fatal: 'feature/login' is already used by worktree at '~/work/myrepo'</span></td><td>別のブランチ名で作る（<code>-b 新ブランチ名</code>）</td></tr>
+      <tr><td><b><code>.gitignore</code> 対象のファイルは引き継がれない</b></td><td>新しいフォルダに、<code>.env.local</code> のような無視されているファイルが<b>存在しない</b></td><td>必要な設定ファイルは、フォルダごとに用意する</td></tr>
+      <tr><td><b>ビルド成果物・依存パッケージも別々</b></td><td><code>bin</code>/<code>obj</code>、<code>node_modules</code> などは新しいフォルダでは空</td><td>初回は復元・ビルドが必要（C# なら <code>dotnet restore</code> など）</td></tr>
+      <tr><td><b>フォルダが増える・片付けが要る</b></td><td>使い終わっても残る</td><td><code>git worktree remove</code> で削除</td></tr>
+      <tr><td>変更の残っているフォルダは、消そうとすると止まる</td><td><span class="mono">fatal: '...' contains modified or untracked files, use --force to delete it</span></td><td>先にコミットか退避。捨ててよければ <code>--force</code></td></tr>
+      <tr><td>フォルダを手で消すと、記録だけ残る</td><td><code>git worktree list</code> に <span class="mono">prunable</span> と出る</td><td><code>git worktree prune</code> で片付ける</td></tr>
+      <tr><td><b>stash は全フォルダで共有</b></td><td>別フォルダで預けた stash が、元のフォルダの <code>git stash list</code> に出る</td><td>メモに「ブランチ名: 内容」を書く（混同を防ぐ）</td></tr>
+      <tr><td>IDEやビルドは別フォルダ扱い</td><td>ソリューションやプロジェクトは、フォルダごとに別に開く</td><td>フォルダ名を分かりやすくしておく</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>stash / WIPコミット / worktree の使い分け</h4>
+  <div class="tbl"><table>
+    <thead><tr><th></th><th>stash</th><th>WIPコミット</th><th>worktree</th></tr></thead>
+    <tbody>
+      <tr><td>向いている場面</td><td>数分〜その日のうちの寄り道</td><td>半日〜数日、同じブランチに戻る</td><td>何度も行き来する／元の作業に触れたくない／並行作業</td></tr>
+      <tr><td>手軽さ</td><td>◎（1コマンド）</td><td>◎</td><td>△（最初にフォルダを作る）</td></tr>
+      <tr><td>混ざる危険</td><td>低い（預ける対象を指定すれば）</td><td>低い</td><td>ほぼなし（フォルダが別）</td></tr>
+      <tr><td>迷子になりやすさ</td><td>やや高い（全ブランチ共通の棚）</td><td>低い（ブランチの履歴に紐づく）</td><td>低い（フォルダ名で分かる）</td></tr>
+      <tr><td>向かない場面</td><td>長期の預けっぱなし</td><td>push してしまう危険がある</td><td>1回だけの短い寄り道</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>基本コマンド</h4>
+  <p>状況：<code class="i">feature/login</code> で未コミットの変更がある状態のまま、<code class="i">main</code> から hotfix を作業します。</p>
+  <div class="term"><div class="term-head"><span>ターミナル（パスは読みやすく簡略化）</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git worktree add ../myrepo-hotfix -b hotfix/urgent main</span><span class="l out">Preparing worktree (new branch 'hotfix/urgent')</span><span class="l out">HEAD is now at 7b507a8 init</span><span class="l cm"># ↑ main から hotfix/urgent ブランチを作り、別フォルダに展開</span><span class="l cmd">git worktree list</span><span class="l out">~/work/myrepo         7b507a8 [feature/login]</span><span class="l out">~/work/myrepo-hotfix  7b507a8 [hotfix/urgent]</span><span class="l cm"># ../myrepo-hotfix に移動して、普通に編集・コミットする。元のフォルダの未コミットの変更はそのまま</span><span class="l cmd">git worktree remove ../myrepo-hotfix</span><span class="l cm"># 終わったらフォルダを片付ける</span></code></pre></div>
+  <div class="tbl"><table>
+    <thead><tr><th>やりたいこと</th><th>コマンド</th></tr></thead>
+    <tbody>
+      <tr><td>新しいブランチを作って別フォルダに</td><td><code>git worktree add ../dir -b 新ブランチ 元ブランチ</code></td></tr>
+      <tr><td>すでにあるブランチを別フォルダに</td><td><code>git worktree add ../dir ブランチ名</code>（そのブランチが、ほかのフォルダで開かれていないこと）</td></tr>
+      <tr><td>一覧</td><td><code>git worktree list</code></td></tr>
+      <tr><td>削除</td><td><code>git worktree remove ../dir</code></td></tr>
+      <tr><td>フォルダを手で消してしまった後始末</td><td><code>git worktree prune</code></td></tr>
+    </tbody>
+  </table></div>
+</div>
+</section>
+
+<!-- ============ 第3章 ============ -->
+<section class="ch" id="ch3">
+<div class="wrap">
+  <h2>第3章　場面②：うっかり混ざった状態でコミットしてしまった</h2>
+
+  <div class="story"><b>状況</b>
+  <code class="i">Api.cs</code> の修正だけをコミットするつもりで <code class="i">git add -A</code>。気づいたら作業途中の <code class="i">Login.cs</code> と、ただのメモ <code class="i">Memo.cs</code> も入っていた。まだ push はしていない。</div>
+
+  <h3>3-1　まず何が入ったかを確認する</h3>
+  <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git show --stat</span><span class="l out">3302211 feat: api修正</span><span class="l out"> Api.cs   | 1 +</span><span class="l out"> Login.cs | 1 +</span><span class="l out"> Memo.cs  | 1 +</span></code></pre></div>
+  <p><code class="i">--stat</code> は、ファイルごとの変更行数の表を出すオプションです（<code class="i">git status -s</code> の <code class="i">-s</code> とは別物。詳しくは <a href="#opt">1-3</a>）。</p>
+  <p>ここから「混ざったファイルを外す」のですが、その前に、使う道具 <code class="i">--amend</code> の仕組みを理解しておきます。</p>
+
+  <h3>3-2　--amend の仕組み</h3>
+  <p><code class="i">git commit --amend</code> は、<b>直前のコミットを「そのコミットの中身＋今のステージの中身」で作り直して、置き換える</b>コマンドです。<u>ステージに入っていないものは材料にならない</u>ので、「未ステージの変更は混ざらない」ことになります。</p>
+
+  <figure>
+    <svg viewBox="0 0 760 290" role="img" aria-labelledby="f4t">
+      <title id="f4t">amend の前後：直前のコミットが新しいコミットに置き換わる</title>
+      <defs>
+        <marker id="m4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="ah"/></marker>
+        <marker id="m4i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="ah-index"/></marker>
+      </defs>
+      <text x="20" y="26" class="t-ink" font-weight="700">amend の前</text>
+      <rect x="20" y="40" width="130" height="50" rx="10" class="s-repo"/>
+      <text x="85" y="70" text-anchor="middle" class="t-repo">init</text>
+      <path d="M152 65 H208" class="ln-repo"/>
+      <rect x="210" y="40" width="210" height="50" rx="10" class="s-repo"/>
+      <text x="315" y="62" text-anchor="middle" class="t-repo">A（abc1234）</text>
+      <text x="315" y="80" text-anchor="middle" class="t-dim">Api.cs を含む　← HEAD</text>
+      <rect x="520" y="32" width="220" height="66" rx="10" class="s-index"/>
+      <text x="630" y="58" text-anchor="middle" class="t-index">今のステージ</text>
+      <text x="630" y="80" text-anchor="middle" class="t-dim">例：b.cs</text>
+
+      <text x="20" y="144" class="t-ink" font-weight="700">amend の後（git commit --amend --no-edit）</text>
+      <rect x="20" y="158" width="130" height="50" rx="10" class="s-repo"/>
+      <text x="85" y="188" text-anchor="middle" class="t-repo">init</text>
+      <path d="M152 183 H208" class="ln-repo"/>
+      <rect x="210" y="158" width="210" height="50" rx="10" class="s-repo"/>
+      <text x="315" y="180" text-anchor="middle" class="t-repo">A'（def5678）</text>
+      <text x="315" y="198" text-anchor="middle" class="t-dim">Api.cs ＋ b.cs　← HEAD</text>
+      <path d="M520 110 C470 120 440 140 424 168" class="ln-index" marker-end="url(#m4i)"/>
+      <text x="548" y="132" class="t-index" font-size="13">ステージの中身が合流</text>
+
+      <rect x="210" y="232" width="210" height="44" rx="10" class="s-ghost"/>
+      <text x="315" y="252" text-anchor="middle" class="t-dim">元の A（abc1234）</text>
+      <text x="315" y="268" text-anchor="middle" class="t-dim">置き換えられた・reflog に残る</text>
+      <path d="M315 210 V230" class="ln-back"/>
+      <text x="470" y="258" class="t-dim">ID が変わる＝別のコミットになる</text>
+    </svg>
+    <figcaption>amend は「修正」ではなく「作り直して置き換え」です。だから IDが変わり、push 済みのコミットには使えません。元のコミットは reflog に残ります。</figcaption>
+  </figure>
+
+  <h3>3-3　シミュレーター：何が混ざるかを試す</h3>
+  <p>直前のコミットに <span class="mono">a.cs</span> が入っています。そこに、いま <span class="mono">b.cs</span>（編集済み）、<span class="mono">c.cs</span>（編集済み）、<span class="mono">d.cs</span>（新規）の3つがあります。ステージの状態とコマンドを変えて、結果を確認してください。</p>
+
+  <div class="sim" id="sim">
+    <h4>1. ファイルの状態を決める</h4>
+    <div class="sim-files" id="simFiles"></div>
+    <fieldset>
+      <legend>2. 実行するコマンド</legend>
+      <label><input type="radio" name="simcmd" value="noedit" checked><code class="i">git commit --amend --no-edit</code></label>
+      <label><input type="radio" name="simcmd" value="m"><code class="i">git commit --amend -m "新メッセージ"</code></label>
+      <label><input type="radio" name="simcmd" value="only"><code class="i">git commit --amend --only -m "新メッセージ"</code></label>
+      <label><input type="radio" name="simcmd" value="a"><code class="i">git commit -a --amend --no-edit</code></label>
+    </fieldset>
+    <h4>3. 結果</h4>
+    <div class="sim-out" aria-live="polite">
+      <div class="sim-col in"><h5>新しいコミットに入るもの</h5><ul id="simIn"></ul></div>
+      <div class="sim-col rest"><h5>コミットせずに手元へ残るもの</h5><ul id="simRest"></ul></div>
+    </div>
+    <div class="sim-note" id="simNote"></div>
+    <p style="margin:12px 0 0"><button type="button" id="simReset" style="font:inherit;font-size:.85rem;padding:5px 12px;border-radius:8px;border:2px solid var(--ink);background:var(--panel);color:var(--ink);cursor:pointer">最初の状態に戻す</button></p>
+  </div>
+
+  <p>上のシミュレーターの結果は、実際に実行した結果と一致します。</p>
+  <details>
+    <summary>実際にターミナルで試した出力を見る</summary>
+    <div class="term"><div class="term-head"><span>ターミナル（b.cs ステージ済み／c.cs 未ステージ／d.cs 未追跡）</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git status -s</span><span class="l out">M  b.cs</span><span class="l out"> M c.cs</span><span class="l out">?? d.cs</span><span class="l cmd">git commit --amend --no-edit</span><span class="l cmd">git show --stat --format='%h %s'</span><span class="l out">5ced26d feat: a を修正</span><span class="l out"> a.cs | 1 +</span><span class="l out"> b.cs | 1 +</span><span class="l good">← ステージ済みの b.cs だけが入った</span><span class="l cmd">git status -s</span><span class="l out"> M c.cs</span><span class="l out">?? d.cs</span></code></pre></div>
+  </details>
+
+  <a class="simlink" href="git-simulator.html"><b>複数の操作を組み合わせて試したいときは：git-simulator.html</b>
+    add / commit / amend / reset / stash / switch を好きな順に実行して、3つの置き場所の変化と、ここまでに実行した<b>本物のGitコマンド</b>を確認できます。この章の「混ざったコミットから外す」などの練習用の状況も入っています。</a>
+
+  <h3>3-4　--amend を使う場面</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>場面</th><th>コマンド</th></tr></thead>
+    <tbody>
+      <tr><td>ファイルの入れ忘れ（<code>git add ファイル</code> のあと）</td><td><code>git commit --amend --no-edit</code></td></tr>
+      <tr><td>直前のコミットの小さな直し（typo・フォーマット）</td><td>直して <code>git add</code> → <code>git commit --amend --no-edit</code></td></tr>
+      <tr><td>メッセージだけ直す</td><td><code>git commit --amend --only -m "新しいメッセージ"</code></td></tr>
+      <tr><td>AIが作ったコミットに自分の修正を混ぜて1個にしたい</td><td>直して <code>git add</code> → <code>git commit --amend --no-edit</code></td></tr>
+      <tr><td>混ざったファイルをコミットから外す</td><td>次の 3-5 を参照</td></tr>
+    </tbody>
+  </table></div>
+  <div class="box warn"><span class="t">amend の事故パターン</span>
+  <p>amend は<b>いまステージされているもの全部</b>を取り込みます。<code class="i">git add</code> したまま忘れていたファイルが混ざることがあるので、実行前に <code class="i">git status -s</code> で左の列を確認します。混ざってしまったときの戻し方は第5章にあります。</p></div>
+
+  <h3>3-5　混ざったファイルをコミットから外す（直前のコミット）</h3>
+  <p>状況は 3-1 のとおりです。Login.cs と Memo.cs をコミットから外して、<b>手元には残します</b>。</p>
+  <ol class="steps">
+    <li><span class="h">ステージが空であることを確認する</span>
+      <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git status -s</span><span class="l cm"># 左の列（ステージ）に何も出ていなければOK（?? の行は関係なし）</span><span class="l cm"># 左の列に M や A があるなら、先に git restore --staged ファイル名 で外しておく</span></code></pre></div></li>
+    <li><span class="h">外したいファイルを「1つ前の状態」に戻す（ステージ上だけ）</span>
+      <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git reset HEAD~ -- Login.cs Memo.cs</span><span class="l out">Unstaged changes after reset:</span><span class="l out">M	Login.cs</span><span class="l cmd">git status -s</span><span class="l out">MM Login.cs</span><span class="l out">D  Memo.cs</span><span class="l out">?? Memo.cs</span></code></pre></div>
+      <p>表示が少し変ですが、正常です。ステージ上では「Login.cs は1つ前の状態に戻り、Memo.cs は削除扱い」、手元には Login.cs の編集と Memo.cs の実体が残っている、という意味です。</p></li>
+    <li><span class="h">コミットを作り直す</span>
+      <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git commit --amend --no-edit</span><span class="l cmd">git show --stat --format='%h %s'</span><span class="l out">d1b21ca feat: api修正</span><span class="l out"> Api.cs | 1 +</span><span class="l good">← Api.cs だけになった</span><span class="l cmd">git status -s</span><span class="l out"> M Login.cs</span><span class="l out">?? Memo.cs</span><span class="l good">← 手元には残っている</span></code></pre></div></li>
+  </ol>
+  <details>
+    <summary>別のやり方：いったんコミットを取り消して、やり直す</summary>
+    <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git reset --soft HEAD~1</span><span class="l cm"># コミットだけ取り消す。全部ステージ済みで残る</span><span class="l cmd">git restore --staged Login.cs Memo.cs</span><span class="l cm"># 外したいものをステージから外す</span><span class="l cmd">git commit -m "feat: api修正"</span></code></pre></div>
+    <p>メッセージも書き直したいときは、こちらが分かりやすいです。</p>
+  </details>
+
+  <h3>3-6　2つ以上前のコミットから外す</h3>
+  <p><code class="i">rebase -i</code> で過去のコミットの途中に止まり、そこで 3-5 と同じことをします。</p>
+  <ol class="steps">
+    <li><span class="h">念のため、今の位置に印をつけておく</span>
+      <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git branch backup/before-rebase</span></code></pre></div>
+      <p>失敗したら <code class="i">git reset --hard backup/before-rebase</code> で戻れます（終わったら <code class="i">git branch -D backup/before-rebase</code> で削除）。</p></li>
+    <li><span class="h">対象のコミットが含まれる範囲で rebase -i を開く</span>
+      <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git rebase -i HEAD~3</span></code></pre></div>
+      <p>開いたエディタで、対象コミットの行頭 <code class="i">pick</code> を <code class="i">edit</code> に書き換えて保存します。</p>
+      <div class="term"><div class="term-head"><span>エディタの内容</span></div><pre><code><span class="l out">edit fbde94f feat: A (Memo.cs 混入)</span><span class="l out">pick 4847cac feat: B</span><span class="l out">pick 8912214 feat: C</span></code></pre></div></li>
+    <li><span class="h">止まったコミットでファイルを外す</span>
+      <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git reset HEAD~ -- Memo.cs</span><span class="l cmd">git commit --amend --no-edit</span></code></pre></div></li>
+    <li><span class="h">残りのコミットを積み直す</span>
+      <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git rebase --continue</span><span class="l out">Successfully rebased and updated refs/heads/main.</span></code></pre></div>
+      <p>実際に試した結果、3つのコミットは main.cs だけの変更になり、Memo.cs は手元に未追跡で残りました。</p></li>
+  </ol>
+  <div class="box warn"><span class="t">途中で分からなくなったら</span>
+  <p><code class="i">git rebase --abort</code> で rebase を始める前の状態に戻れます。また、後ろのコミットが同じファイルを触っていると、積み直しで衝突することがあります。</p></div>
+
+  <h3>3-7　誤ってコミットしたファイルを「Git管理」から外す</h3>
+  <div class="story"><b>状況</b>
+  <code class="i">.env.local</code>（自分用の設定）を誤ってコミットしてしまった。今後は管理対象にしたくないが、手元のファイルは残したい。</div>
+  <div class="box danger"><span class="t">.gitignore に書くだけでは外れません</span>
+  <p>すでに管理されているファイルは、<code class="i">.gitignore</code> に書いても無視されません。実際に試すと、<code class="i">.gitignore</code> に追記したあとも <span class="mono">M .env.local</span> と変更が表示され続けました。</p></div>
+  <ol class="steps">
+    <li><span class="h">管理から外す（手元のファイルは残る）</span>
+      <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git rm --cached .env.local</span></code></pre></div>
+      <p><code class="i">--cached</code> を付けないとファイルも削除されます。</p></li>
+    <li><span class="h">今後のために .gitignore に追加する</span>
+      <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">echo ".env.local" >> .gitignore</span><span class="l cmd">git add .gitignore</span></code></pre></div></li>
+    <li><span class="h">直前のコミットに混ぜる（または新しいコミットにする）</span>
+      <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git commit --amend --no-edit</span><span class="l cmd">git show --stat --format='%h %s'</span><span class="l out">df9acb3 oops .env.local 入れた</span><span class="l out"> .gitignore | 1 +</span><span class="l out"> app.cs     | 1 +</span><span class="l cmd">ls -a</span><span class="l out">. .. .env.local .git .gitignore app.cs</span><span class="l good">← .env.local は手元に残っている</span></code></pre></div></li>
+  </ol>
+  <div class="box danger"><span class="t">パスワードなどの機密を入れてしまった場合</span>
+  <p>amend しても、push 済みなら履歴に残ります。この場合は履歴の書き換えより先に、<b>そのパスワードやキーを無効にして再発行</b>するのが優先です。</p></div>
+
+  <h3>3-8　メッセージを直す／複数のコミットを1つにまとめる</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>やりたいこと</th><th>コマンド</th><th>メモ</th></tr></thead>
+    <tbody>
+      <tr><td>直前のメッセージだけ直す</td><td><code>git commit --amend --only -m "新"</code></td><td>ステージ済みは混ざらない</td></tr>
+      <tr><td>古いコミットのメッセージを直す</td><td><code>git rebase -i HEAD~3</code> → 対象行の <code>pick</code> を <code>reword</code> に</td><td>保存するとメッセージ編集画面が開く</td></tr>
+      <tr><td>直近3個を1個にまとめる</td><td><code>git reset --soft HEAD~3</code> → <code>git commit -m "まとめ"</code></td><td>実際に試すと <code>fix 1/2/3</code> の3コミットが1つになった</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>3-9　もう push してしまっていたら</h3>
+  <ul class="plain">
+    <li>自分1人のブランチなら、書き換えたあとに <code class="i">git push --force-with-lease</code>。他人の変更を上書きしない安全版の強制pushです。</li>
+    <li>他の人も使っているブランチなら、書き換えずに<b>新しいコミットで直す</b>のが基本です（例：<code class="i">git rm --cached</code> して通常のコミット）。</li>
+  </ul>
+</div>
+</section>
+
+<!-- ============ 第4章 ============ -->
+<section class="ch" id="ch4">
+<div class="wrap">
+  <h2>第4章　予防：そもそも混ぜない</h2>
+
+  <h3>4-1　ファイルを名指ししてコミットする</h3>
+  <p><code class="i">git commit -m "メッセージ" -- ファイル名</code> とすると、<b>ステージの状態に関係なく、指定したファイルだけ</b>がコミットされます。未コミットの変更を置いたまま作業する運用と相性が良い方法です。</p>
+  <div class="term"><div class="term-head"><span>ターミナル（Login.cs は誤ってステージ済み）</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git status -s</span><span class="l out"> M Api.cs</span><span class="l out">M  Login.cs</span><span class="l out">?? New.cs</span><span class="l cmd">git commit -m "fix: apiだけ" -- Api.cs</span><span class="l out">[main 8f15210] fix: apiだけ</span><span class="l out"> 1 file changed, 1 insertion(+)</span><span class="l cmd">git status -s</span><span class="l out">M  Login.cs</span><span class="l out">?? New.cs</span><span class="l good">← Login.cs はステージ済みのまま残り、コミットには入っていない</span></code></pre></div>
+  <div class="box warn"><span class="t">新規ファイルは先に git add が必要です</span>
+  <div class="term"><div class="term-head"><span>ターミナル</span></div><pre><code><span class="l cmd">git commit -m "new" -- New.cs</span><span class="l bad">error: pathspec 'New.cs' did not match any file(s) known to git</span></code></pre></div>
+  <p><code class="i">git add New.cs</code> をしてから、もう一度コミットします。</p></div>
+
+  <h3>4-2　同じファイルの中で行単位に選ぶ</h3>
+  <p><code class="i">git add -p</code> は、変更を1か所ずつ表示して「入れるか」を聞いてくれます。</p>
+  <div class="tbl"><table>
+    <thead><tr><th>入力</th><th>意味</th></tr></thead>
+    <tbody>
+      <tr><td><code>y</code></td><td>この変更をステージに入れる</td></tr>
+      <tr><td><code>n</code></td><td>入れない</td></tr>
+      <tr><td><code>s</code></td><td>さらに細かく分割する</td></tr>
+      <tr><td><code>q</code></td><td>終了する</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>4-3　コミット前の3秒チェック</h3>
+  <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git status -s</span><span class="l cm"># 左の列＝コミットされるもの</span><span class="l cmd">git diff --staged</span><span class="l cm"># ステージ済みの中身を最終確認</span></code></pre></div>
+  <p><code class="i">git add .</code> や <code class="i">git add -A</code> の代わりに <code class="i">git add ファイル名</code> と名指しで追加するクセをつけるだけでも、混ざる事故はかなり減ります。</p>
+</div>
+</section>
+
+<!-- ============ 第5章 ============ -->
+<section class="ch" id="ch5">
+<div class="wrap">
+  <h2>第5章　やらかしたときの戻し方</h2>
+  <p>Git は HEAD が動いた履歴を <code class="i">reflog</code> に記録しています。コミットに関する操作は、ほとんどここから戻せます。</p>
+
+  <h3>5-1　例：amend で余計なファイルまで混ぜてしまった</h3>
+  <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git reflog -3</span><span class="l out">000234f HEAD@{0}: commit (amend): feat: a</span><span class="l out">42de403 HEAD@{1}: commit (initial): feat: a</span><span class="l cm"># HEAD@{1} が amend する前の状態</span><span class="l cmd">git reset --soft HEAD@{1}</span><span class="l cmd">git status -s</span><span class="l out">M  b</span><span class="l cm"># 混ぜてしまった変更が、ステージ済みで戻ってきた</span><span class="l cmd">git restore --staged b</span><span class="l cmd">git status -s</span><span class="l out"> M b</span><span class="l good">← コミットには入れず、手元の変更として残った</span></code></pre></div>
+
+  <h3>5-2　状況別の戻し方</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>状況</th><th>戻し方</th></tr></thead>
+    <tbody>
+      <tr><td><code>git add</code> しすぎた</td><td><code>git restore --staged ファイル名</code>（手元の編集は消えない）</td></tr>
+      <tr><td><code>commit</code> / <code>--amend</code> 直後に戻したい</td><td><code>git reflog</code> で1つ前を探す → <code>git reset --soft HEAD@{1}</code>（変更はステージ済みで残る）</td></tr>
+      <tr><td>rebase の途中で迷子になった</td><td><code>git rebase --abort</code></td></tr>
+      <tr><td>rebase が終わったあとに戻したい</td><td><code>git reflog</code> で rebase を始める前の行を探し、そのIDへ <code>git reset --hard ID</code>（または <code>git reset --hard ORIG_HEAD</code>）</td></tr>
+      <tr><td><code>stash drop</code> してしまった</td><td>直後なら、表示されたハッシュで <code>git stash apply ハッシュ</code></td></tr>
+    </tbody>
+  </table></div>
+  <div class="box answer"><span class="t">ORIG_HEAD について</span>
+  <p><code class="i">ORIG_HEAD</code> は <code class="i">reset</code> や <code class="i">rebase</code> の直前の位置を覚えておく目印ですが、<b><code class="i">--amend</code> では更新されません</b>。実際に試して確認しました。amend を戻すときは <code>git reflog</code> の <code>HEAD@{1}</code> を使います。</p></div>
+
+  <div class="box danger"><span class="t">戻せないもの：コミットしていない変更</span>
+  <p><code class="i">git reset --hard</code> や、作業ツリーを戻す <code class="i">git restore ファイル名</code>（<code class="i">--staged</code> なし）は、<b>まだコミットしていない変更を消します。reflog にも残らないので戻せません。</b>怖い操作の前には、次のどちらかで退避しておきます。</p>
+  <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git stash push -u -m "退避"</span><span class="l cm"># 未コミットの変更を預ける</span><span class="l cmd">git branch backup/xxx</span><span class="l cm"># 今のコミット位置に印をつける（rebase 前など）</span></code></pre></div></div>
+</div>
+</section>
+
+<!-- ============ 第6章 ============ -->
+<section class="ch" id="ch6">
+<div class="wrap">
+  <h2>第6章　Gitが管理しているファイルを調べる</h2>
+  <p>「いまGitが管理しているファイルは何か」「あのファイルは管理されているか」を調べるコマンドです。以下は、次のような小さなリポジトリで実際に実行した結果です。</p>
+  <div class="term"><div class="term-head"><span>例のリポジトリの構成</span></div><pre><code><span class="l out">.gitignore                      （bin/ と *.local を無視する設定）</span><span class="l out">docs/README.md</span><span class="l out">src/Api/LoginController.cs</span><span class="l out">src/Api/UserController.cs</span><span class="l out">src/Auth/LoginService.cs</span><span class="l cm"># ほかに、未追跡の Memo.cs、無視されている app.local と bin/out.dll がある</span></code></pre></div>
+
+  <h3>6-1　管理されているファイルの一覧</h3>
+  <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git ls-files</span><span class="l out">.gitignore</span><span class="l out">docs/README.md</span><span class="l out">src/Api/LoginController.cs</span><span class="l out">src/Api/UserController.cs</span><span class="l out">src/Auth/LoginService.cs</span></code></pre></div>
+  <p><code class="i">git ls-files</code> は、<b>いまGitが管理している（追跡している）ファイルを、パスで一覧表示</b>します。変更の有無には関係なく、全部出ます。</p>
+  <div class="tbl"><table>
+    <thead><tr><th>やりたいこと</th><th>コマンド</th><th>結果（例）</th></tr></thead>
+    <tbody>
+      <tr><td>拡張子で絞る</td><td><code>git ls-files '*.cs'</code></td><td>.cs の3ファイル（フォルダの奥のものも含む）</td></tr>
+      <tr><td>フォルダで絞る</td><td><code>git ls-files src/Api</code></td><td><code>LoginController.cs</code> と <code>UserController.cs</code></td></tr>
+      <tr><td>件数を数える（Git Bash / Mac / Linux）</td><td><code>git ls-files | wc -l</code></td><td><code>5</code></td></tr>
+      <tr><td>件数を数える（PowerShell）</td><td><code>(git ls-files | Measure-Object).Count</code></td><td><code>5</code></td></tr>
+    </tbody>
+  </table></div>
+  <div class="box warn"><span class="t">補足</span>
+  <p><code class="i">*</code> を含むパターンは、<b>シングルクォートで囲みます</b>（シェルに展開される前に、Gitへ渡すため）。また、<code class="i">git add</code> した新規ファイルは、コミット前でもこの一覧に出ます（「ステージにあるもの」を表示するため）。</p></div>
+
+  <h3>6-2　管理されているファイルを「探す」</h3>
+  <h4>ファイル名で探す</h4>
+  <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git ls-files '*Login*'</span><span class="l out">src/Api/LoginController.cs</span><span class="l out">src/Auth/LoginService.cs</span><span class="l cm"># ↑ Git自身のパターン指定。フォルダの奥まで探す</span><span class="l cmd">git ls-files | grep -i controller</span><span class="l out">src/Api/LoginController.cs</span><span class="l out">src/Api/UserController.cs</span><span class="l cm"># ↑ 一覧を grep で絞る（-i は大文字小文字を区別しない）。PowerShell なら下の行</span><span class="l cmd">git ls-files | Select-String controller</span></code></pre></div>
+
+  <h4>ファイルの中身で探す</h4>
+  <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git grep -n "Controller"</span><span class="l out">src/Api/LoginController.cs:1:class LoginController { }</span><span class="l out">src/Api/UserController.cs:1:class UserController { }</span><span class="l cm"># -n：行番号も表示</span><span class="l cmd">git grep -l "Login"</span><span class="l out">src/Api/LoginController.cs</span><span class="l out">src/Auth/LoginService.cs</span><span class="l cm"># -l：一致したファイル名だけ表示</span></code></pre></div>
+  <p><code class="i">git grep</code> は、<b>管理されているファイルの中だけ</b>を検索します（<code class="i">bin</code> や無視されているファイルは対象外なので、速くてノイズが少ないです）。</p>
+
+  <h3>6-3　「このファイルは管理されている？」を調べる</h3>
+  <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git ls-files --error-unmatch src/Api/UserController.cs</span><span class="l out">src/Api/UserController.cs</span><span class="l good">← パスが表示されれば、管理されている（終了コード 0）</span><span class="l cmd">git ls-files --error-unmatch Memo.cs</span><span class="l bad">error: pathspec 'Memo.cs' did not match any file(s) known to git</span><span class="l bad">Did you forget to 'git add'?</span><span class="l cm"># ↑ エラーになれば、管理されていない（終了コード 1）</span></code></pre></div>
+  <p>ファイルが無視されている理由を知りたいときは、<code class="i">git check-ignore -v</code> を使います。どの <code class="i">.gitignore</code> の何行目のルールが効いているかが分かります。</p>
+  <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git check-ignore -v app.local bin/out.dll</span><span class="l out">.gitignore:2:*.local	app.local</span><span class="l out">.gitignore:1:bin/	bin/out.dll</span></code></pre></div>
+
+  <h3>6-4　状態で絞る（変更中・未追跡・無視されている）</h3>
+  <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git ls-files -m</span><span class="l out">docs/README.md</span><span class="l cm"># -m：管理中のファイルのうち、変更されているもの</span><span class="l cmd">git ls-files --others --exclude-standard</span><span class="l out">Memo.cs</span><span class="l cm"># 未追跡のファイル（.gitignore で無視されているものは除く）</span><span class="l cmd">git ls-files --others --ignored --exclude-standard</span><span class="l out">app.local</span><span class="l out">bin/out.dll</span><span class="l cm"># .gitignore で無視されているファイル</span></code></pre></div>
+
+  <h3>6-5　別のブランチや過去の時点のファイル一覧</h3>
+  <p><code class="i">git ls-files</code> は「いま」の一覧です。特定のコミットやブランチ時点の一覧は <code class="i">git ls-tree</code> を使います。</p>
+  <div class="term"><div class="term-head"><span>ターミナル</span><button class="copy" type="button">コピー</button></div><pre><code><span class="l cmd">git ls-tree -r HEAD --name-only</span><span class="l out">.gitignore</span><span class="l out">docs/README.md</span><span class="l out">src/Api/LoginController.cs</span><span class="l out">src/Api/UserController.cs</span><span class="l out">src/Auth/LoginService.cs</span><span class="l cm"># HEAD の代わりに、main や feature/login、コミットIDも指定できる。-r はフォルダの中まで</span><span class="l cmd">git log --oneline -- 'src/Auth/*'</span><span class="l out">53de124 init</span><span class="l cm"># そのパスを変更したコミットの履歴</span></code></pre></div>
+
+  <div class="box warn"><span class="t">ここでも <code class="i">-s</code> には注意</span>
+  <p><code class="i">git ls-files -s</code> は「短く表示」ではなく <code class="i">--stage</code>（ステージの情報を表示）です。実際に出力すると <span class="mono">100644 89931ee… 0	docs/README.md</span> のように、ファイルの種類とハッシュが出ます。詳しくは <a href="#opt">1-3</a>。</p></div>
+</div>
+</section>
+
+<!-- ============ 第7章 ============ -->
+<section class="ch" id="ch7">
+<div class="wrap">
+  <h2>第7章　早見表</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>やりたいこと</th><th>コマンド</th></tr></thead>
+    <tbody>
+      <tr><td>指定ファイルだけコミット</td><td><code>git commit -m "msg" -- a.cs b.cs</code>（新規は先に <code>git add</code>）</td></tr>
+      <tr><td>行単位で選んでコミット</td><td><code>git add -p</code> → <code>git commit</code></td></tr>
+      <tr><td>別作業用のファイルだけ stash</td><td><code>git stash push -u -m "ブランチ名: 内容" -- a.cs b.cs</code>（新規ファイルには <code>-u</code> が必要）</td></tr>
+      <tr><td>ステージ済みだけ stash</td><td><code>git stash push --staged -m "メモ"</code>（Git 2.35 以降）</td></tr>
+      <tr><td>stash の一覧・中身の確認</td><td><code>git stash list</code> ／ <code>git stash show -p</code></td></tr>
+      <tr><td>stash を戻す（安全な順）</td><td><code>git stash apply</code> → 確認 → <code>git stash drop</code></td></tr>
+      <tr><td>作業をブランチに紐づけて退避</td><td><code>git add -A</code> → <code>git commit -m "WIP"</code> → 戻ったら <code>git reset HEAD~1</code></td></tr>
+      <tr><td>並行作業（別フォルダ）</td><td><code>git worktree add ../dir -b 新ブランチ 元</code> ／ 終わったら <code>git worktree remove ../dir</code></td></tr>
+      <tr><td>直前のコミットに混ぜる</td><td><code>git add ...</code> → <code>git commit --amend --no-edit</code></td></tr>
+      <tr><td>直前のコミットからファイルを外す（手元に残す）</td><td><code>git reset HEAD~ -- file</code> → <code>git commit --amend --no-edit</code></td></tr>
+      <tr><td>古いコミットからファイルを外す</td><td><code>git rebase -i</code> で <code>edit</code> → 上の2行 → <code>git rebase --continue</code></td></tr>
+      <tr><td>Git管理から外す（手元に残す）</td><td><code>git rm --cached file</code> ＋ <code>.gitignore</code> に追加 → コミット</td></tr>
+      <tr><td>直前のメッセージを直す</td><td><code>git commit --amend --only -m "新"</code></td></tr>
+      <tr><td>古いメッセージを直す</td><td><code>git rebase -i</code> で <code>reword</code></td></tr>
+      <tr><td>直近N個を1個にまとめる</td><td><code>git reset --soft HEAD~N</code> → <code>git commit -m "..."</code></td></tr>
+      <tr><td>ステージを取り消す</td><td><code>git restore --staged file</code></td></tr>
+      <tr><td>コミット操作のやらかしを戻す</td><td><code>git reflog</code> → <code>git reset --soft HEAD@{1}</code></td></tr>
+      <tr><td>管理しているファイルの一覧</td><td><code>git ls-files</code>（絞り込み：<code>git ls-files '*Login*'</code>）</td></tr>
+      <tr><td>管理ファイルの中身を検索</td><td><code>git grep -n "文字列"</code></td></tr>
+      <tr><td>このファイルは管理されている？</td><td><code>git ls-files --error-unmatch パス</code></td></tr>
+      <tr><td>未追跡・無視されているファイルの一覧</td><td><code>git ls-files --others --exclude-standard</code> ／ <code>git ls-files --others --ignored --exclude-standard</code></td></tr>
+      <tr><td>変更ファイルと行数の一覧</td><td><code>git diff --stat</code> ／ <code>git show --stat</code></td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>おすすめの運用</h3>
+  <ol class="plain">
+    <li>短い寄り道は <code class="i">git stash push -u -m "ブランチ名: 内容" -- 別作業のファイル</code>（ファイルを指定して預ける）。</li>
+    <li>半日以上の別作業は WIPコミット。</li>
+    <li>並行作業が日常なら <code class="i">git worktree</code>。</li>
+    <li>コミットするときは <code class="i">git commit -m "..." -- ファイル名</code> で名指しする。</li>
+    <li>混ざったら <code class="i">git reset HEAD~ -- file</code> → <code class="i">git commit --amend --no-edit</code>。</li>
+    <li>rebase など怖い操作の前は <code class="i">git branch backup/xxx</code> で印をつける。</li>
+  </ol>
+
+  <h3>用語</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>用語</th><th>意味</th></tr></thead>
+    <tbody>
+      <tr><td>HEAD</td><td>今いるブランチの最新コミットを指す目印</td></tr>
+      <tr><td>HEAD~</td><td>HEAD の1つ前のコミット（<code>HEAD~3</code> は3つ前）</td></tr>
+      <tr><td>追跡済み／未追跡</td><td>Gitが管理している／まだ管理していないファイル</td></tr>
+      <tr><td>ステージ／インデックス</td><td>次のコミットに入れる予定の変更を置く場所</td></tr>
+      <tr><td>reflog</td><td>HEAD が動いた履歴。コミット操作の取り消しに使う</td></tr>
+      <tr><td>WIP</td><td>Work In Progress。作業途中の意味</td></tr>
+      <tr><td>amend</td><td>直前のコミットを作り直して置き換えること</td></tr>
+      <tr><td>worktree</td><td>同じリポジトリを共有した、別フォルダの作業ツリー</td></tr>
+      <tr><td><code>--</code></td><td>「ここから先はファイル名」という区切り</td></tr>
+    </tbody>
+  </table></div>
+</div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>検証環境：Git 2.43.0。手順はすべて実際のリポジトリで実行して確認しました。出力は読みやすさのため一部省略し、パスは簡略化しています。複数の操作を組み合わせて試したいときは <a href="git-simulator.html">git-simulator.html</a> を使ってください。</p>
+  </div>
+</footer>
+
+<script>
+/* ---- コピー ---- */
+document.addEventListener('click', function(e){
+  var b = e.target.closest('button.copy');
+  if(!b) return;
+  var term = b.closest('.term');
+  var lines = Array.prototype.map.call(term.querySelectorAll('.cmd'), function(n){return n.textContent;});
+  var text = lines.join('\n');
+  function done(){ var o=b.textContent; b.textContent='コピーしました'; setTimeout(function(){b.textContent=o;},1400); }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done, function(){ fallback(text); done(); });
+  } else { fallback(text); done(); }
+  function fallback(t){
+    var ta=document.createElement('textarea'); ta.value=t; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(_){ } document.body.removeChild(ta);
+  }
+});
+
+/* ---- amend シミュレーター ---- */
+(function(){
+  var initial = function(){ return {
+    b:{kind:'mod', staged:true},
+    c:{kind:'mod', staged:false},
+    d:{kind:'new', staged:false}
+  };};
+  var files = initial();
+  var order = ['b','c','d'];
+  var filesEl = document.getElementById('simFiles');
+  var inEl = document.getElementById('simIn');
+  var restEl = document.getElementById('simRest');
+  var noteEl = document.getElementById('simNote');
+
+  function cmd(){ return document.querySelector('input[name="simcmd"]:checked').value; }
+
+  function stateLabel(f){
+    if(f.kind==='new') return f.staged ? {cls:'c-index', t:'ステージ済み（新規）'} : {cls:'c-tree', t:'未追跡（新規）'};
+    return f.staged ? {cls:'c-index', t:'ステージ済み（編集）'} : {cls:'c-tree', t:'未ステージ（編集）'};
+  }
+
+  function renderFiles(){
+    filesEl.innerHTML = '';
+    var fixed = document.createElement('div');
+    fixed.className = 'sim-file fixed';
+    fixed.innerHTML = '<span class="nm">a.cs</span><span>直前のコミットに入っている</span><span></span>';
+    filesEl.appendChild(fixed);
+    order.forEach(function(k){
+      var f = files[k], s = stateLabel(f);
+      var row = document.createElement('div');
+      row.className = 'sim-file';
+      var nm = document.createElement('span'); nm.className='nm'; nm.textContent = k + '.cs';
+      var st = document.createElement('span'); st.innerHTML = '<span class="chip '+s.cls+'">'+s.t+'</span>';
+      var btn = document.createElement('button'); btn.type='button';
+      btn.textContent = f.staged ? 'ステージから外す' : (f.kind==='new' ? 'git add する' : 'git add する');
+      btn.setAttribute('aria-label', k+'.cs を'+(f.staged?'ステージから外す':'git add する'));
+      btn.addEventListener('click', function(){ f.staged = !f.staged; render(); });
+      row.appendChild(nm); row.appendChild(st); row.appendChild(btn);
+      filesEl.appendChild(row);
+    });
+  }
+
+  function li(html){ var e=document.createElement('li'); e.innerHTML=html; return e; }
+
+  function renderResult(){
+    var c = cmd();
+    var included = [];
+    order.forEach(function(k){
+      var f = files[k];
+      if(c==='noedit' || c==='m'){ if(f.staged) included.push(k); }
+      else if(c==='a'){ if(f.staged || f.kind==='mod') included.push(k); }
+      /* only: 何も追加しない */
+    });
+    inEl.innerHTML=''; restEl.innerHTML='';
+    inEl.appendChild(li('<b>a.cs</b>（元から）'));
+    included.forEach(function(k){
+      var f = files[k];
+      var why = (c==='a' && !f.staged) ? '（-a が自動でステージ）' : (f.staged ? '（ステージ済みだった）' : '');
+      inEl.appendChild(li('<b>'+k+'.cs</b> '+why));
+    });
+    var rest = order.filter(function(k){ return included.indexOf(k)===-1; });
+    if(rest.length===0){ restEl.appendChild(li('なし')); }
+    rest.forEach(function(k){
+      var f = files[k], t;
+      if(f.kind==='new') t = f.staged ? 'ステージ済みのまま残る' : '未追跡のまま残る';
+      else t = f.staged ? 'ステージ済みのまま残る' : '未ステージの変更として残る';
+      restEl.appendChild(li('<b>'+k+'.cs</b>：'+t));
+    });
+
+    var msg = (c==='noedit' || c==='a') ? 'コミットメッセージは変わりません。' : 'コミットメッセージが新しいものに変わります。';
+    var hint = '';
+    if(c==='only'){
+      hint = 'メッセージだけを直すコマンドです。ステージに何があっても、ファイルはコミットに入りません。';
+    } else if(c==='a'){
+      hint = '<code class="i">-a</code> は、追跡済みファイルの変更をすべて自動でステージします。意図しない編集も入るので注意。未追跡の新規ファイルは入りません。';
+    } else {
+      var stagedList = order.filter(function(k){return files[k].staged;});
+      hint = stagedList.length
+        ? 'ステージ済みの <b>'+stagedList.map(function(k){return k+'.cs';}).join('、')+'</b> がコミットに入ります。意図どおりか、実行前に <code class="i">git status -s</code> の左の列で確認を。'
+        : 'ステージに何もないので、中身はそのままです（メッセージだけ変わる場合あり）。';
+    }
+    noteEl.innerHTML = msg + '<br>' + hint;
+  }
+
+  function render(){ renderFiles(); renderResult(); }
+  Array.prototype.forEach.call(document.querySelectorAll('input[name="simcmd"]'), function(r){ r.addEventListener('change', renderResult); });
+  document.getElementById('simReset').addEventListener('click', function(){
+    files = initial();
+    document.querySelector('input[name="simcmd"][value="noedit"]').checked = true;
+    render();
+  });
+  render();
+})();
+</script>
+</body>
+</html>

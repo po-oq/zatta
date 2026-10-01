@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Git 操作シミュレーター：押した順に、実際のコマンドが出る</title>
+<style>
+:root{
+  --ink:#1b2430; --ink-2:#4a5565; --paper:#f3f5f9; --panel:#ffffff; --line:#d3dae5;
+  --tree:#2b72c9; --tree-bg:#e3eefb;
+  --index:#a8670a; --index-bg:#fcefd2;
+  --repo:#1f7f59; --repo-bg:#def2e8;
+  --danger:#bf3333; --danger-bg:#fde7e7;
+  --code-bg:#13202e; --code-ink:#e6edf5; --code-dim:#8fa3b8; --code-cmd:#9fd3ff;
+  --radius:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --ink:#e7edf5; --ink-2:#a9b5c6; --paper:#0e1520; --panel:#162130; --line:#2a3b50;
+    --tree:#72b0f5; --tree-bg:#152f4d;
+    --index:#eab24c; --index-bg:#3a2d10;
+    --repo:#5fc79d; --repo-bg:#10362b;
+    --danger:#ff8585; --danger-bg:#42191c;
+    --code-bg:#0a111a;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"BIZ UDPGothic","Hiragino Sans","Yu Gothic UI","Meiryo",system-ui,sans-serif;line-height:1.75;font-size:15.5px}
+code,pre,.mono{font-family:"Cascadia Mono","SF Mono",Consolas,"Noto Sans Mono CJK JP",monospace}
+a{color:var(--tree)}
+:focus-visible{outline:3px solid var(--tree);outline-offset:2px;border-radius:4px}
+.wrap{max-width:1120px;margin:0 auto;padding:0 18px}
+header{padding:36px 0 14px}
+h1{font-size:clamp(1.5rem,3.6vw,2.1rem);line-height:1.35;margin:0 0 10px}
+.lead{color:var(--ink-2);margin:0 0 10px;max-width:46em}
+h2{font-size:1.15rem;margin:0 0 10px}
+h3{font-size:1rem;margin:0 0 8px}
+p{margin:0 0 10px}
+.chip{display:inline-flex;align-items:center;padding:1px 10px;border-radius:999px;border:2px solid;font-weight:700;font-size:.85rem}
+.c-tree{background:var(--tree-bg);border-color:var(--tree);color:var(--tree)}
+.c-index{background:var(--index-bg);border-color:var(--index);color:var(--index)}
+.c-repo{background:var(--repo-bg);border-color:var(--repo);color:var(--repo)}
+.c-none{background:transparent;border-color:var(--line);color:var(--ink-2);font-weight:400}
+.c-danger{background:var(--danger-bg);border-color:var(--danger);color:var(--danger)}
+code.i{background:color-mix(in srgb,var(--ink) 9%,transparent);padding:1px 6px;border-radius:5px;font-size:.92em}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px}
+.panel>h2:first-child{margin-top:0}
+.scn{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+button.b{font:inherit;font-size:.9rem;padding:6px 14px;border-radius:8px;border:2px solid var(--ink);background:var(--panel);color:var(--ink);cursor:pointer}
+button.b:hover{background:var(--paper)}
+button.b.on{background:var(--ink);color:var(--paper)}
+button.b.run{background:var(--ink);color:var(--paper);font-weight:700;padding:8px 22px}
+button.b.run:hover{opacity:.9}
+button.b:disabled{opacity:.4;cursor:default}
+.grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:16px;align-items:start}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+
+/* matrix */
+.tbl{overflow-x:auto}
+table.m{border-collapse:separate;border-spacing:0 4px;width:100%;min-width:480px;font-size:.92rem}
+table.m th{font-size:.8rem;text-align:center;padding:4px 6px;font-weight:700;color:var(--ink-2)}
+table.m th.h-repo{color:var(--repo)} table.m th.h-index{color:var(--index)} table.m th.h-tree{color:var(--tree)}
+table.m td{padding:4px 6px;text-align:center}
+table.m td.f{text-align:left;font-family:"Cascadia Mono","SF Mono",Consolas,monospace;font-weight:700}
+table.m td.st{font-family:"Cascadia Mono","SF Mono",Consolas,monospace;white-space:pre}
+.vc{display:inline-block;min-width:3.2rem;padding:1px 8px;border-radius:7px;border:2px solid var(--line);font-family:"Cascadia Mono","SF Mono",Consolas,monospace;font-size:.85rem}
+.vc.repo{background:var(--repo-bg);border-color:var(--repo);color:var(--repo)}
+.vc.index{background:var(--index-bg);border-color:var(--index);color:var(--index)}
+.vc.tree{background:var(--tree-bg);border-color:var(--tree);color:var(--tree)}
+.vc.dim{background:transparent;border-color:var(--line);color:var(--ink-2);opacity:.75}
+.vc.diff{box-shadow:0 0 0 3px color-mix(in srgb,currentColor 35%,transparent);font-weight:800}
+.vc.none{border-style:dashed;color:var(--ink-2);background:transparent}
+.note{font-size:.85rem;color:var(--ink-2)}
+
+/* terminal */
+.term{background:var(--code-bg);color:var(--code-ink);border-radius:var(--radius);overflow:hidden;margin:8px 0}
+.term-head{display:flex;justify-content:space-between;align-items:center;padding:5px 10px 5px 14px;background:rgba(255,255,255,.06);font-size:.78rem;color:var(--code-dim)}
+.term-head button{font:inherit;font-size:.76rem;color:var(--code-ink);background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);border-radius:6px;padding:2px 10px;cursor:pointer}
+.term pre{margin:0;padding:10px 14px;overflow:auto;font-size:.86rem;line-height:1.6;max-height:420px}
+.term .l{display:block;white-space:pre-wrap;word-break:break-word}
+.term .cmd{color:var(--code-cmd)}
+.term .cmd::before{content:"$ ";color:var(--code-dim);user-select:none}
+.term .cm{color:var(--code-dim)}
+.term .out{color:var(--code-ink)}
+.term .bad{color:#ff9a9a}
+.term .good{color:#8fe3bb}
+.term .gr{color:#6fd39a} .term .rd{color:#ff8b8b}
+.term .warn{color:#ffd27a}
+
+/* commits / stash */
+ul.clean{list-style:none;margin:0;padding:0}
+ul.clean li{padding:6px 10px;border:1px solid var(--line);border-radius:8px;margin:5px 0;font-size:.92rem}
+ul.clean li.cur{background:var(--repo-bg);border-color:var(--repo)}
+.sha{font-family:"Cascadia Mono","SF Mono",Consolas,monospace;font-weight:700;color:var(--repo)}
+.fl{display:inline-block;margin:2px 4px 0 0;padding:0 7px;border-radius:6px;background:color-mix(in srgb,var(--ink) 8%,transparent);font-family:"Cascadia Mono","SF Mono",Consolas,monospace;font-size:.8rem}
+.tag{display:inline-block;margin-left:6px;padding:0 8px;border-radius:999px;background:var(--ink);color:var(--paper);font-size:.72rem;font-weight:700}
+
+/* builder */
+.field{margin:10px 0}
+.field label.t{display:block;font-weight:700;font-size:.88rem;margin-bottom:4px}
+select,input[type=text]{font:inherit;font-size:.92rem;width:100%;padding:7px 10px;border:2px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink)}
+.files{display:flex;flex-wrap:wrap;gap:6px}
+.files label{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border:2px solid var(--line);border-radius:8px;cursor:pointer;font-family:"Cascadia Mono","SF Mono",Consolas,monospace;font-size:.88rem}
+.files label:has(input:checked){border-color:var(--ink);background:color-mix(in srgb,var(--ink) 8%,transparent)}
+.preview{margin-top:10px}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center}
+.result{margin-top:10px;padding:8px 12px;border-radius:8px;border:2px solid;font-size:.9rem}
+.result.ok{background:var(--repo-bg);border-color:var(--repo)}
+.result.err{background:var(--danger-bg);border-color:var(--danger)}
+.result.dng{background:var(--index-bg);border-color:var(--index)}
+
+details{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:10px 16px;margin:10px 0}
+details summary{cursor:pointer;font-weight:700}
+details[open] summary{margin-bottom:8px}
+ol.ans{margin:6px 0 0;padding-left:1.4em}
+footer{padding:20px 0 60px;color:var(--ink-2);font-size:.85rem}
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 0}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <h1>Git 操作シミュレーター</h1>
+    <p class="lead">ボタンで操作を選んで実行すると、<b>3つの置き場所（コミット・ステージ・作業ツリー）</b>がどう変わるかが見えて、ここまでに実行した<b>本物のGitコマンド</b>が下に溜まっていきます。複数の操作を順番に重ねて試せます。</p>
+    <p class="lead">詳しい解説は <a href="git-practical-guide.html">Gitで「混ざった」「戻したい」を自力で直す実践ガイド</a> にあります。</p>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="panel" aria-labelledby="scnT">
+    <h2 id="scnT">1. 練習する状況を選ぶ</h2>
+    <div class="scn" id="scn" role="group" aria-label="練習する状況"></div>
+    <p class="note" id="scnDesc"></p>
+    <div class="legend" aria-label="色の意味">
+      <span class="chip c-repo">コミット（HEAD）</span>
+      <span class="chip c-index">ステージ</span>
+      <span class="chip c-tree">作業ツリー</span>
+      <span class="chip c-none">— ＝そのファイルは無い</span>
+    </div>
+  </section>
+
+  <div class="grid">
+    <div>
+      <section class="panel" aria-labelledby="stT">
+        <h2 id="stT">2. いまの状態</h2>
+        <p class="note">現在のブランチ：<b id="brName"></b>　<span id="brOther"></span></p>
+        <div class="tbl"><table class="m" id="matrix"></table></div>
+        <p class="note"><b>v2</b> などは「ファイルの中身の版」です。<b>同じ数字＝同じ中身</b>。太い光る枠は、となりの左の場所と中身が違う（＝差分がある）ところです。</p>
+
+        <h3 style="margin-top:14px">git status -s の出力（実際のターミナルと同じ色）</h3>
+        <div class="term"><div class="term-head"><span>左の1文字＝ステージ（緑）／右の1文字＝作業ツリー（赤）</span></div><pre><code id="statusOut"></code></pre></div>
+      </section>
+
+      <section class="panel" aria-labelledby="hiT">
+        <h2 id="hiT">コミット履歴（新しい順）</h2>
+        <ul class="clean" id="history"></ul>
+      </section>
+
+      <section class="panel" aria-labelledby="sxT">
+        <h2 id="sxT">stash（預けた変更）</h2>
+        <ul class="clean" id="stashList"></ul>
+      </section>
+    </div>
+
+    <div>
+      <section class="panel" aria-labelledby="bdT">
+        <h2 id="bdT">3. 操作を選んで実行する</h2>
+        <div class="field"><label class="t" for="opSel">操作</label><select id="opSel"></select></div>
+        <div id="params"></div>
+        <div class="preview">
+          <div class="term"><div class="term-head"><span>実行されるコマンド</span></div><pre><code id="preview"></code></pre></div>
+        </div>
+        <div class="actions">
+          <button class="b run" type="button" id="runBtn">実行する</button>
+          <button class="b" type="button" id="undoBtn">1つ前に戻す</button>
+          <button class="b" type="button" id="resetBtn">最初からやり直す</button>
+        </div>
+        <div id="result" class="result ok" role="status" aria-live="polite" hidden></div>
+        <p class="note" style="margin-top:8px">「1つ前に戻す」はこのシミュレーター上の取り消しです。本物のGitで間違えたときの戻し方は、実践ガイドの第5章を見てください。</p>
+      </section>
+
+      <section class="panel" aria-labelledby="lgT">
+        <h2 id="lgT">4. ここまでの実行ログ</h2>
+        <div class="term"><div class="term-head"><span>ターミナル</span><button type="button" id="copyBtn">コマンドをコピー</button></div><pre><code id="log"></code></pre></div>
+        <p class="note">「コマンドをコピー」は、<code class="i">$</code> の付いたコマンドだけを順番どおりにコピーします（# で始まる行は「エディタで編集した」などGit以外の操作のメモです）。</p>
+      </section>
+    </div>
+  </div>
+
+  <section class="panel" aria-labelledby="chT">
+    <h2 id="chT">お題：こんなときどうする？</h2>
+    <p class="note">状況を読み込んでから、自分で操作を組み立ててみてください。詰まったら「答えを見る」。</p>
+    <div id="challenges"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="lmT">
+    <h2 id="lmT">このシミュレーターの単純化していること</h2>
+    <ul style="margin:0;padding-left:1.3em">
+      <li>ファイルの中身は「版の数字」で表しています。同じファイルを両側で別々に変更すると、<b>必ず衝突</b>として扱います。本物のGitは行単位でマージするので、別々の行の変更なら衝突しません。</li>
+      <li><code class="i">.gitignore</code>、リモート（push / pull）、ブランチの新規作成、マージ、rebase は扱いません。</li>
+      <li>コマンドの出力は、Git 2.43 で実際に確認した内容をもとに短くしてあります。</li>
+    </ul>
+  </section>
+</main>
+
+<footer><div class="wrap">作業ツリー／ステージ／コミットの動きを、Git 2.43.0 の実際の動作と突き合わせて作っています。</div></footer>
+
+<!-- =============== エンジン（画面に依存しない） =============== -->
+<script id="engine">
+var Engine=(function(){
+  function clone(o){return JSON.parse(JSON.stringify(o));}
+  function g(o,k){var v=o[k];return (v===undefined||v===null)?null:v;}
+  function set(o,k,v){ if(v===null||v===undefined) delete o[k]; else o[k]=v; }
+  function same(a,b){var ks={},k;for(k in a)ks[k]=1;for(k in b)ks[k]=1;for(k in ks){if(g(a,k)!==g(b,k))return false;}return true;}
+  function sha(n){var x=(Math.imul(n,2654435761)>>>0).toString(16);var y=((Math.imul(n+11,40503)*9973)>>>0).toString(16);return (x+y).padStart(7,'0').slice(0,7);}
+  function newId(S){var id;do{S.shaN++;id=sha(S.shaN*97+13);}while(S.commits[id]);return id;}
+  function mk(S,msg,snap,parent){var id=newId(S);S.commits[id]={id:id,msg:msg,snap:snap,parent:parent};return id;}
+  function tipC(S){return S.commits[S.tips[S.branch]];}
+  function headSnap(S){return tipC(S).snap;}
+  function parentC(S){var t=tipC(S);return t.parent?S.commits[t.parent]:null;}
+  function pl(n,w){return n+' '+w+(n===1?'':'s');}
+
+  function baseState(){return {ver:10,shaN:0,commits:{},tips:{},branch:'feature/login',index:{},work:{},stash:[],reflog:[],conflicts:[]};}
+
+  function preset(name){
+    var S=baseState();
+    var c0=mk(S,'init',{'Api.cs':1,'Login.cs':1},null);
+    S.tips['feature/login']=c0;S.tips['main']=c0;
+    S.reflog=[{id:c0,desc:'commit (initial): init'}];
+    if(name==='chapter2'){
+      S.index={'Api.cs':1,'Login.cs':1};
+      S.work={'Api.cs':2,'Login.cs':3,'Memo.cs':4};
+    } else if(name==='chapter3'){
+      var c1=mk(S,'feat: api修正',{'Api.cs':2,'Login.cs':3,'Memo.cs':4},c0);
+      S.tips['feature/login']=c1;
+      S.reflog.unshift({id:c1,desc:'commit: feat: api修正'});
+      S.index=clone(S.commits[c1].snap);S.work=clone(S.commits[c1].snap);
+    } else if(name==='amend'){
+      var c2=mk(S,'feat: a',{'Api.cs':2,'Login.cs':1},c0);
+      S.tips['feature/login']=c2;
+      S.reflog.unshift({id:c2,desc:'commit: feat: a'});
+      S.index={'Api.cs':2,'Login.cs':5};
+      S.work={'Api.cs':2,'Login.cs':5,'Auth.cs':6,'Notes.cs':7};
+      S.index['Auth.cs']=1;
+      S.commits[c0].snap['Auth.cs']=1; S.commits[c2].snap['Auth.cs']=1;
+    } else if(name==='twobranches'){
+      var m1=mk(S,'main: Login.cs を変更',{'Api.cs':1,'Login.cs':8},c0);
+      S.tips['main']=m1;
+      S.reflog.unshift({id:m1,desc:'commit: main: Login.cs を変更'});
+      S.index={'Api.cs':1,'Login.cs':1};
+      S.work={'Api.cs':2,'Login.cs':3,'Memo.cs':4};
+    }
+    return S;
+  }
+
+  function names(S){
+    var o={};var t=tipC(S);
+    [t.snap,S.index,S.work].forEach(function(m){Object.keys(m).forEach(function(k){o[k]=1;});});
+    if(t.parent)Object.keys(S.commits[t.parent].snap).forEach(function(k){o[k]=1;});
+    return Object.keys(o).sort();
+  }
+  function diff(a,b){
+    var ks={},r=[],k;for(k in a)ks[k]=1;for(k in b)ks[k]=1;
+    Object.keys(ks).sort().forEach(function(f){var x=g(a,f),y=g(b,f);if(x===y)return;r.push({f:f,k:x===null?'A':(y===null?'D':'M')});});
+    return r;
+  }
+  function statusEntries(S){
+    var head=headSnap(S),tr=[],un=[];
+    names(S).forEach(function(f){
+      if(S.conflicts.indexOf(f)>=0){tr.push({xy:'UU',f:f});return;}
+      var h=g(head,f),i=g(S.index,f),w=g(S.work,f);
+      if(h===null&&i===null){if(w!==null)un.push({xy:'??',f:f});return;}
+      if(i===null){tr.push({xy:'D ',f:f});if(w!==null)un.push({xy:'??',f:f});return;}
+      var X=(h===null)?'A':(h!==i?'M':' ');
+      var Y=(w===null)?'D':(i!==w?'M':' ');
+      if(X!==' '||Y!==' ')tr.push({xy:X+Y,f:f});
+    });
+    return tr.concat(un);
+  }
+  function history(S,n){
+    var r=[],c=tipC(S);
+    while(c&&r.length<(n||8)){
+      var ps=c.parent?S.commits[c.parent].snap:{};
+      r.push({id:c.id,msg:c.msg,files:diff(ps,c.snap)});
+      c=c.parent?S.commits[c.parent]:null;
+    }
+    return r;
+  }
+
+  function q(files){return files.join(' ');}
+  function cmdString(p){
+    var f=p.files||[];
+    switch(p.op){
+      case 'edit':return '# '+p.file+' を編集して保存';
+      case 'create':return '# '+p.name+' を新規作成';
+      case 'add':return 'git add '+q(f);
+      case 'addA':return 'git add -A';
+      case 'restoreStaged':return 'git restore --staged '+q(f);
+      case 'restoreWork':return 'git restore '+q(f);
+      case 'commit':return 'git commit -m "'+p.msg+'"';
+      case 'commitAll':return 'git commit -a -m "'+p.msg+'"';
+      case 'commitPaths':return 'git commit -m "'+p.msg+'" -- '+q(f);
+      case 'amend':
+        if(p.variant==='noedit')return 'git commit --amend --no-edit';
+        if(p.variant==='only')return 'git commit --amend --only -m "'+p.msg+'"';
+        if(p.variant==='msg')return 'git commit --amend -m "'+p.msg+'"';
+        return 'git commit -a --amend --no-edit';
+      case 'resetPath':return 'git reset HEAD~ -- '+q(f);
+      case 'reset':return 'git reset '+(p.mode==='soft'?'--soft ':p.mode==='hard'?'--hard ':'')+p.target;
+      case 'rmCached':return 'git rm --cached '+q(f);
+      case 'stashPush':return 'git stash push'+(p.u?' -u':'')+(p.msg?' -m "'+p.msg+'"':'')+(f.length?' -- '+q(f):'');
+      case 'stashApply':return 'git stash apply';
+      case 'stashPop':return 'git stash pop';
+      case 'stashDrop':return 'git stash drop';
+      case 'switch':return 'git switch '+p.branch;
+      case 'reflog':return 'git reflog';
+    }
+    return '';
+  }
+
+  function R(ok,out,note,extra){var r={ok:ok,out:out||[],note:note||''};if(extra){for(var k in extra)r[k]=extra[k];}return r;}
+  function err(out,note){return R(false,out,note);}
+  function pathspecErr(f){return err(["error: pathspec '"+f+"' did not match any file(s) known to git"],'「'+f+'」はGitがまだ知らないファイルです（先に git add が必要）。');}
+  function needFiles(p,msg){return (!p.files||p.files.length===0)?err([msg||'ファイル名を指定してください'],'ファイルを1つ以上選んでください。'):null;}
+  function unmerged(S){return S.conflicts.length?err(['error: Committing is not possible because you have unmerged files.','hint: Fix them up in the work tree, and then use \'git add/rm <file>\''],'衝突が解決されていません。ファイルを直して git add してください。'):null;}
+
+  function unstagedLines(S){
+    var head=headSnap(S),r=[];
+    names(S).forEach(function(f){
+      var i=g(S.index,f),w=g(S.work,f);
+      if(i===null)return;
+      if(w===null)r.push('D\t'+f);else if(i!==w)r.push('M\t'+f);
+    });
+    return r;
+  }
+
+  function nothingToCommit(S){
+    var st=statusEntries(S);
+    var hasTracked=st.some(function(e){return e.xy!=='??';});
+    var line;
+    var hasUntracked=st.some(function(e){return e.xy==='??';});
+    if(hasTracked)line='no changes added to commit (use "git add" and/or "git commit -a")';
+    else if(hasUntracked)line='nothing added to commit but untracked files present (use "git add" to track)';
+    else line='nothing to commit, working tree clean';
+    return err(['On branch '+S.branch,line],'コミットするもの（ステージにある差分）がありません。');
+  }
+
+  function doCommit(S,msg,snap){
+    if(!msg)return err(['Aborting commit due to empty commit message.'],'メッセージが空です。');
+    var head=headSnap(S);
+    if(same(snap,head))return nothingToCommit(S);
+    var t=tipC(S);
+    var id=mk(S,msg,snap,t.id);
+    S.tips[S.branch]=id;
+    S.reflog.unshift({id:id,desc:'commit: '+msg});
+    var d=diff(head,snap);
+    return R(true,['['+S.branch+' '+id+'] '+msg,' '+pl(d.length,'file')+' changed'],
+      'コミットしました：'+d.map(function(x){return x.f;}).join('、'));
+  }
+
+  function doAmend(S,p){
+    var u=unmerged(S);if(u)return u;
+    var t=tipC(S),snap,msg=t.msg;
+    if(p.variant==='noedit'){snap=clone(S.index);}
+    else if(p.variant==='msg'){if(!p.msg)return err(['Aborting commit due to empty commit message.'],'メッセージが空です。');snap=clone(S.index);msg=p.msg;}
+    else if(p.variant==='only'){if(!p.msg)return err(['Aborting commit due to empty commit message.'],'メッセージが空です。');snap=clone(headSnap(S));msg=p.msg;}
+    else {
+      Object.keys(S.index).forEach(function(f){set(S.index,f,g(S.work,f));});
+      snap=clone(S.index);
+    }
+    var parent=t.parent;
+    var id=mk(S,msg,snap,parent);
+    var old=t.id;
+    S.tips[S.branch]=id;
+    S.reflog.unshift({id:id,desc:'commit (amend): '+msg});
+    var ps=parent?S.commits[parent].snap:{};
+    var d=diff(ps,snap);
+    return R(true,['['+S.branch+' '+id+'] '+msg,' '+pl(d.length,'file')+' changed'],
+      '直前のコミット '+old+' を、新しいコミット '+id+' で置き換えました（元のコミットは reflog に残ります）。中身：'+(d.map(function(x){return x.f;}).join('、')||'なし'));
+  }
+
+  function resolveTarget(S,target){
+    var t=tipC(S);
+    if(target==='HEAD~1'){
+      if(!t.parent)return {e:err(["fatal: ambiguous argument 'HEAD~1': unknown revision or path not in the working tree."],'1つ前のコミットがありません。')};
+      return {id:t.parent};
+    }
+    var m=/^HEAD@\{(\d+)\}$/.exec(target);
+    if(m){var e=S.reflog[+m[1]];if(!e)return {e:err(['fatal: log for HEAD only has '+S.reflog.length+' entries'],'reflog にその番号はありません。')};return {id:e.id};}
+    return {e:err(['fatal: bad revision'],'')};
+  }
+
+  function stashText(S,msg){var t=tipC(S);return msg?('On '+S.branch+': '+msg):('WIP on '+S.branch+': '+t.id+' '+t.msg);}
+
+  function stashPush(S,p){
+    if(S.conflicts.length)return err(['error: could not write index'],'衝突が解決されていません。');
+    var files=p.files||[],head=headSnap(S),all=names(S),i;
+    for(i=0;i<files.length;i++){
+      var f=files[i],h=g(head,f),ix=g(S.index,f),w=g(S.work,f);
+      var known=(h!==null||ix!==null);
+      if(!known){
+        if(w!==null&&p.u)continue;
+        return err(["error: pathspec '"+f+"' did not match any file(s) known to git","Did you forget to 'git add'?"],
+          '未追跡の新規ファイルをパス指定して預けるには、-u も必要です。');
+      }
+    }
+    var scope=files.length?files:all,tracked={},untracked={},any=false;
+    scope.forEach(function(f){
+      var h=g(head,f),ix=g(S.index,f),w=g(S.work,f);
+      if(h===null&&ix===null){if(w!==null&&p.u){untracked[f]=w;any=true;}return;}
+      if(ix===null)return;
+      if(h!==ix||ix!==w){tracked[f]={base:h,val:w};any=true;}
+    });
+    if(!any)return R(true,['No local changes to save'],'預けるものがありませんでした。');
+    Object.keys(tracked).forEach(function(f){var h=g(head,f);set(S.index,f,h);set(S.work,f,h);});
+    Object.keys(untracked).forEach(function(f){set(S.work,f,null);});
+    var text=stashText(S,p.msg);
+    S.stash.unshift({text:text,branch:S.branch,tracked:tracked,untracked:untracked});
+    var fl=Object.keys(tracked).concat(Object.keys(untracked));
+    return R(true,['Saved working directory and index state '+text],'預けたファイル：'+fl.join('、'));
+  }
+
+  function fakeHash(S){S.shaN++;return sha(S.shaN*131+5)+'0f3a9c1d2e4b5a6978'.slice(0,33);}
+
+  function stashApply(S,drop){
+    var e=S.stash[0];
+    if(!e)return err(['No stash entries found.'],'stash は空です。');
+    var head=headSnap(S),dirty=[];
+    Object.keys(e.tracked).forEach(function(f){
+      if(g(S.index,f)!==g(head,f)||g(S.work,f)!==g(head,f))dirty.push(f);
+    });
+    if(dirty.length)return err(['error: Your local changes to the following files would be overwritten by merge:'].concat(dirty.map(function(f){return '\t'+f;})).concat(['Please commit your changes or stash them before you merge.','Aborting']),
+      '同じファイルに未コミットの変更があるので、Gitが止めました。先にコミットするか stash してください。');
+    var existing=Object.keys(e.untracked).filter(function(f){return g(S.work,f)!==null;});
+    if(existing.length)return err(existing.map(function(f){return f+' already exists, no checkout';}).concat(['error: could not restore untracked files from stash']),'同名のファイルが既にあるため、未追跡ファイルを戻せません。');
+    var merged={},conflictF=[];
+    Object.keys(e.tracked).forEach(function(f){
+      var b=e.tracked[f].base,v=e.tracked[f].val,cur=g(head,f);
+      if(cur===b||cur===v)merged[f]=v;else conflictF.push(f);
+    });
+    var anyC=conflictF.length>0;
+    Object.keys(merged).forEach(function(f){
+      var b=e.tracked[f].base;
+      set(S.work,f,merged[f]);
+      if(anyC||b===null)set(S.index,f,merged[f]);
+    });
+    conflictF.forEach(function(f){S.conflicts.push(f);set(S.work,f,++S.ver);});
+    Object.keys(e.untracked).forEach(function(f){set(S.work,f,e.untracked[f]);});
+    var all=Object.keys(e.tracked).concat(Object.keys(e.untracked)).join('、');
+    if(anyC){
+      var o=[];conflictF.forEach(function(f){o.push('Auto-merging '+f);o.push('CONFLICT (content): Merge conflict in '+f);});
+      if(drop)o.push('The stash entry is kept in case you need it again.');
+      return err(o,'衝突しました。stash は残っています。ファイルを直して git add → 不要になったら git stash drop。');
+    }
+    var out=['On branch '+S.branch];
+    var res=R(true,out,'stash の内容を戻しました：'+all);
+    if(drop){var hh=fakeHash(S);S.stash.shift();out.push('Dropped refs/stash@{0} ('+hh+')');res.note+='（stash からは削除）';}
+    else res.note+='（stash には残したまま）';
+    return res;
+  }
+
+  function doSwitch(S,p){
+    if(S.conflicts.length)return err(['error: you need to resolve your current index first'],'衝突の解決が先です。');
+    if(p.branch===S.branch)return R(true,["Already on '"+p.branch+"'"],'すでにそのブランチです。');
+    var oldHead=headSnap(S),newC=S.commits[S.tips[p.branch]],newHead=newC.snap;
+    var ks={},bad=[],k;for(k in oldHead)ks[k]=1;for(k in newHead)ks[k]=1;for(k in S.index)ks[k]=1;for(k in S.work)ks[k]=1;
+    Object.keys(ks).sort().forEach(function(f){
+      if(g(oldHead,f)!==g(newHead,f)){
+        if(g(S.work,f)!==g(oldHead,f)||g(S.index,f)!==g(oldHead,f))bad.push(f);
+      }
+    });
+    if(bad.length)return err(['error: Your local changes to the following files would be overwritten by checkout:'].concat(bad.map(function(f){return '\t'+f;})).concat(['Please commit your changes or stash them before you switch branches.','Aborting']),
+      '切り替え先で内容が違うファイルに、未コミットの変更があるのでGitが止めました。');
+    Object.keys(ks).forEach(function(f){
+      if(g(oldHead,f)!==g(newHead,f)){set(S.index,f,g(newHead,f));set(S.work,f,g(newHead,f));}
+    });
+    S.branch=p.branch;
+    S.reflog.unshift({id:newC.id,desc:'checkout: moving from '+(p.from||'')+' to '+p.branch});
+    var out=[];
+    names(S).forEach(function(f){
+      var h=g(newHead,f),i=g(S.index,f),w=g(S.work,f);
+      if(h===null&&i!==null)out.push('A\t'+f);
+      else if(h!==null&&i!==null&&w===null)out.push('D\t'+f);
+      else if(h!==null&&(h!==i||i!==w))out.push('M\t'+f);
+    });
+    out.push("Switched to branch '"+p.branch+"'");
+    var carried=out.length>1;
+    return R(true,out,carried?'未コミットの変更を持ったまま切り替わりました（変更は付いてくる）。':'切り替えました。');
+  }
+
+  function exec(S,p){
+    var f=p.files||[],r,i;
+    switch(p.op){
+      case 'edit':
+        if(g(S.work,p.file)===null)return err(['(そのファイルは作業ツリーにありません)'],'');
+        set(S.work,p.file,++S.ver);return R(true,[],p.file+' を編集して保存しました（作業ツリーの中身が変わった）。');
+      case 'create':
+        if(!p.name)return err([],'ファイル名を入れてください。');
+        if(g(S.work,p.name)!==null||g(S.index,p.name)!==null||g(headSnap(S),p.name)!==null)return err([],p.name+' はすでにあります。');
+        set(S.work,p.name,++S.ver);return R(true,[],p.name+' を作りました（Gitはまだ知らない「未追跡」）。');
+      case 'add':
+        r=needFiles(p,'Nothing specified, nothing added.');if(r)return r;
+        for(i=0;i<f.length;i++){
+          if(names(S).indexOf(f[i])<0)return pathspecErr(f[i]);
+        }
+        f.forEach(function(x){
+          var ci=S.conflicts.indexOf(x);
+          if(ci>=0){S.conflicts.splice(ci,1);set(S.work,x,++S.ver);set(S.index,x,g(S.work,x));}
+          else set(S.index,x,g(S.work,x));
+        });
+        return R(true,[],'ステージに追加しました：'+f.join('、'));
+      case 'addA':
+        names(S).forEach(function(x){
+          var ci=S.conflicts.indexOf(x);
+          if(ci>=0){S.conflicts.splice(ci,1);set(S.work,x,++S.ver);}
+          set(S.index,x,g(S.work,x));
+        });
+        return R(true,[],'作業ツリーの変更をすべてステージに追加しました（新規ファイルも）。');
+      case 'restoreStaged':
+        r=needFiles(p);if(r)return r;
+        for(i=0;i<f.length;i++){if(S.conflicts.indexOf(f[i])>=0)return err(["error: path '"+f[i]+"' is unmerged"],'');}
+        f.forEach(function(x){set(S.index,x,g(headSnap(S),x));});
+        return R(true,[],'ステージから外しました（手元の編集はそのまま）：'+f.join('、'));
+      case 'restoreWork':
+        r=needFiles(p);if(r)return r;
+        for(i=0;i<f.length;i++){if(g(S.index,f[i])===null)return pathspecErr(f[i]);}
+        f.forEach(function(x){set(S.work,x,g(S.index,x));});
+        return R(true,[],'作業ツリーの変更を捨てました。未コミットの変更は reflog にも残らず、戻せません。',{danger:true});
+      case 'commit':
+        r=unmerged(S);if(r)return r;
+        return doCommit(S,p.msg,clone(S.index));
+      case 'commitAll':
+        r=unmerged(S);if(r)return r;
+        Object.keys(S.index).forEach(function(x){set(S.index,x,g(S.work,x));});
+        return doCommit(S,p.msg,clone(S.index));
+      case 'commitPaths':
+        r=unmerged(S);if(r)return r;
+        r=needFiles(p);if(r)return r;
+        for(i=0;i<f.length;i++){
+          if(g(S.index,f[i])===null&&g(headSnap(S),f[i])===null)return pathspecErr(f[i]);
+        }
+        var snap=clone(headSnap(S));
+        f.forEach(function(x){set(snap,x,g(S.work,x));});
+        var res=doCommit(S,p.msg,snap);
+        if(res.ok){f.forEach(function(x){set(S.index,x,g(S.work,x));});res.note='指定したファイルだけをコミットしました：'+f.join('、')+'（他のファイルはステージの状態のまま）';}
+        return res;
+      case 'amend':return doAmend(S,p);
+      case 'resetPath':
+        r=needFiles(p);if(r)return r;
+        var par=parentC(S);
+        if(!par)return err(["fatal: ambiguous argument 'HEAD~': unknown revision or path not in the working tree."],'1つ前のコミットがありません。');
+        f.forEach(function(x){set(S.index,x,g(par.snap,x));});
+        var ul=unstagedLines(S);
+        return R(true,ul.length?['Unstaged changes after reset:'].concat(ul):[],'ステージ上だけ、ファイルを1つ前の状態に戻しました（手元のファイルは消えていません）：'+f.join('、'));
+      case 'reset':
+        var t=resolveTarget(S,p.target);if(t.e)return t.e;
+        var oldTip=tipC(S),tc=S.commits[t.id];
+        if(p.mode==='soft'){
+          S.tips[S.branch]=t.id;
+          S.reflog.unshift({id:t.id,desc:'reset: moving to '+p.target});
+          return R(true,[],'コミットの位置だけを動かしました。取り消した分の変更は、ステージ済みの状態で手元に残っています。');
+        }
+        if(p.mode==='hard'){
+          var oldIndex=clone(S.index),ks2={},k2;
+          for(k2 in tc.snap)ks2[k2]=1;for(k2 in S.index)ks2[k2]=1;
+          Object.keys(ks2).forEach(function(x){
+            var nv=g(tc.snap,x);
+            if(nv!==null){set(S.work,x,nv);set(S.index,x,nv);}
+            else if(g(oldIndex,x)!==null){set(S.work,x,null);set(S.index,x,null);}
+          });
+          S.conflicts=[];S.tips[S.branch]=t.id;
+          S.reflog.unshift({id:t.id,desc:'reset: moving to '+p.target});
+          return R(true,['HEAD is now at '+tc.id+' '+tc.msg],'コミットの位置も、ステージも、作業ツリーも、すべて指定の状態に戻しました。未コミットの変更は消えました（reflog にも残りません）。',{danger:true});
+        }
+        S.tips[S.branch]=t.id;S.index=clone(tc.snap);S.conflicts=[];
+        S.reflog.unshift({id:t.id,desc:'reset: moving to '+p.target});
+        var ul2=unstagedLines(S);
+        return R(true,ul2.length?['Unstaged changes after reset:'].concat(ul2):[],'コミットを取り消し、変更を「未ステージ」の状態で手元に残しました。');
+      case 'rmCached':
+        r=needFiles(p);if(r)return r;
+        for(i=0;i<f.length;i++){if(g(S.index,f[i])===null)return err(["fatal: pathspec '"+f[i]+"' did not match any files"],'');}
+        f.forEach(function(x){set(S.index,x,null);});
+        return R(true,f.map(function(x){return "rm '"+x+"'";}),'Git管理から外す準備ができました（手元のファイルは残っています）。コミットすると確定します。');
+      case 'stashPush':return stashPush(S,p);
+      case 'stashApply':return stashApply(S,false);
+      case 'stashPop':return stashApply(S,true);
+      case 'stashDrop':
+        if(!S.stash.length)return err(['No stash entries found.'],'stash は空です。');
+        var hh=fakeHash(S);S.stash.shift();
+        return R(true,['Dropped refs/stash@{0} ('+hh+')'],'stash を1つ削除しました。');
+      case 'switch':p.from=S.branch;return doSwitch(S,p);
+      case 'reflog':
+        return R(true,S.reflog.slice(0,8).map(function(e,n){return e.id+' HEAD@{'+n+'}: '+e.desc;}),'HEAD が動いた履歴です。HEAD@{1} は「1つ前の位置」。');
+    }
+    return err(['?'],'');
+  }
+
+  return {preset:preset,exec:exec,cmdString:cmdString,statusEntries:statusEntries,history:history,names:names,clone:clone,headSnap:headSnap,tipC:tipC,parentC:parentC,g:g};
+})();
+if(typeof module!=='undefined')module.exports=Engine;
+</script>
+
+<!-- =============== 画面 =============== -->
+<script id="ui">
+(function(){
+  if(typeof document==='undefined')return;
+  var E=Engine;
+  var SCN=[
+    {k:'chapter2',t:'別ブランチ用の変更を置いたまま作業中',d:'feature/login ブランチで Api.cs（今のブランチの作業）と Login.cs・Memo.cs（別作業用）を編集中。Memo.cs は新規ファイル。まだ何もコミットしていません。'},
+    {k:'chapter3',t:'うっかり混ざってコミットしてしまった',d:'Api.cs だけをコミットするつもりが、Login.cs と Memo.cs も入った「feat: api修正」コミットがあります（まだ push していない）。'},
+    {k:'amend',t:'直前のコミットに混ぜたい（amend 練習）',d:'直前のコミット「feat: a」があります。Login.cs はステージ済み、Auth.cs は編集しただけ（未ステージ）、Notes.cs は新規（未追跡）。'},
+    {k:'twobranches',t:'main 側でも Login.cs が変わっている',d:'main ブランチでは Login.cs が別の内容に変更済みです。feature/login では Api.cs・Login.cs・Memo.cs を編集中。ブランチを切り替えると何が起きるか試せます。'}
+  ];
+  var CH=[
+    {t:'Api.cs だけをコミットしたい（Login.cs と Memo.cs は置いておく）',k:'chapter2',hint:'ファイルを名指ししてコミットする方法と、他を stash で預ける方法があります。',ans:[['git commit -m "fix: api" -- Api.cs'],['git stash push -u -m "別作業" -- Login.cs Memo.cs','git add Api.cs','git commit -m "fix: api"']]},
+    {t:'Login.cs と Memo.cs を stash で預けて main へ移動し、戻って受け取りたい',k:'chapter2',hint:'新規ファイル（Memo.cs）を預けるには -u が必要です。ファイル名で指定すると Api.cs は手元に残ります。',ans:[['git stash push -u -m "認証の途中" -- Login.cs Memo.cs','git switch main','git switch feature/login','git stash apply','git stash drop']]},
+    {t:'混ざった Login.cs と Memo.cs を、最新コミットから外したい（手元には残す）',k:'chapter3',hint:'ステージ上だけ1つ前の状態に戻してから、コミットを作り直します。',ans:[['git reset HEAD~ -- Login.cs Memo.cs','git commit --amend --no-edit']]},
+    {t:'amend で Login.cs まで混ぜてしまった。元に戻したい',k:'amend',hint:'まず amend を実行してから、reflog を見て戻します。',ans:[['git commit --amend --no-edit','git reflog','git reset --soft HEAD@{1}','git restore --staged Login.cs']]},
+    {t:'全部 stash → 同じファイルを別内容でコミット → 戻す、を体験したい',k:'chapter2',hint:'どうなるかを見る実験です。衝突しても stash は残っています。',ans:[['git stash push -m "全部"','# Login.cs を編集して保存','git commit -a -m "別の内容"','git stash apply']]},
+    {t:'未コミットの Login.cs を持ったまま main に切り替えるとどうなる？',k:'twobranches',hint:'main 側でも Login.cs が変わっているので、Git が止めます。Api.cs だけの変更なら通ります。',ans:[['git switch main']]}
+  ];
+
+  var S,undoStack=[],logEntries=[];
+  var scenarioKey='chapter2';
+  var ui={op:'commit',files:{},msg:'',u:false,branch:'main',target:'HEAD~1',name:'Notes.cs',file:'Login.cs'};
+
+  var OPS=[
+    {g:'ファイルを触る（Git以外の操作）',items:[
+      {k:'edit',label:'ファイルを編集して保存する',p:{op:'edit'},need:{edit:1}},
+      {k:'create',label:'新しいファイルを作る',p:{op:'create'},need:{name:1}}]},
+    {g:'ステージ',items:[
+      {k:'add',label:'git add ファイル名',p:{op:'add'},need:{files:1}},
+      {k:'addA',label:'git add -A（全部）',p:{op:'addA'},need:{}},
+      {k:'restoreStaged',label:'git restore --staged（ステージから外す）',p:{op:'restoreStaged'},need:{files:1}},
+      {k:'restoreWork',label:'git restore（作業ツリーを捨てる ⚠）',p:{op:'restoreWork'},need:{files:1}}]},
+    {g:'コミット',items:[
+      {k:'commit',label:'git commit -m',p:{op:'commit'},need:{msg:1},dm:'feat: 変更'},
+      {k:'commitAll',label:'git commit -a -m',p:{op:'commitAll'},need:{msg:1},dm:'feat: 変更'},
+      {k:'commitPaths',label:'git commit -m "…" -- ファイル名',p:{op:'commitPaths'},need:{msg:1,files:1},dm:'fix: 変更'},
+      {k:'amendNoedit',label:'git commit --amend --no-edit',p:{op:'amend',variant:'noedit'},need:{}},
+      {k:'amendOnly',label:'git commit --amend --only -m',p:{op:'amend',variant:'only'},need:{msg:1},dm:'新しいメッセージ'},
+      {k:'amendMsg',label:'git commit --amend -m',p:{op:'amend',variant:'msg'},need:{msg:1},dm:'新しいメッセージ'},
+      {k:'amendAll',label:'git commit -a --amend --no-edit',p:{op:'amend',variant:'all'},need:{}}]},
+    {g:'取り消す・外す',items:[
+      {k:'resetPath',label:'git reset HEAD~ -- ファイル名（ステージだけ戻す）',p:{op:'resetPath'},need:{files:1}},
+      {k:'resetSoft',label:'git reset --soft …（コミットだけ取り消す）',p:{op:'reset',mode:'soft'},need:{target:1}},
+      {k:'resetMixed',label:'git reset …（コミットとステージを戻す）',p:{op:'reset',mode:'mixed'},need:{target:1}},
+      {k:'resetHard',label:'git reset --hard …（全部戻す ⚠）',p:{op:'reset',mode:'hard'},need:{target:1}},
+      {k:'rmCached',label:'git rm --cached ファイル名（Git管理から外す）',p:{op:'rmCached'},need:{files:1}}]},
+    {g:'stash',items:[
+      {k:'stashPush',label:'git stash push（預ける）',p:{op:'stashPush'},need:{msg:1,u:1,filesOpt:1},dm:'作業の途中',optMsg:1},
+      {k:'stashApply',label:'git stash apply（受け取る・棚に残す）',p:{op:'stashApply'},need:{}},
+      {k:'stashPop',label:'git stash pop（受け取って棚から削除）',p:{op:'stashPop'},need:{}},
+      {k:'stashDrop',label:'git stash drop（棚から削除）',p:{op:'stashDrop'},need:{}}]},
+    {g:'ブランチ・確認',items:[
+      {k:'switch',label:'git switch（ブランチを切り替える）',p:{op:'switch'},need:{branch:1}},
+      {k:'reflog',label:'git reflog（HEADの動きを見る）',p:{op:'reflog'},need:{}}]}
+  ];
+  var OPMAP={};OPS.forEach(function(gr){gr.items.forEach(function(it){OPMAP[it.k]=it;});});
+
+  function $(id){return document.getElementById(id);}
+  function el(tag,attrs,kids){
+    var e=document.createElement(tag);
+    if(attrs)for(var k in attrs){if(k==='class')e.className=attrs[k];else if(k==='html')e.innerHTML=attrs[k];else if(k==='text')e.textContent=attrs[k];else e.setAttribute(k,attrs[k]);}
+    (kids||[]).forEach(function(c){e.appendChild(c);});
+    return e;
+  }
+  function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+  function load(key){
+    scenarioKey=key;S=E.preset(key);undoStack=[];logEntries=[];ui.files={};
+    ui.msg='';
+    var sc=SCN.filter(function(x){return x.k===key;})[0];
+    $('scnDesc').textContent=sc.d;
+    Array.prototype.forEach.call($('scn').children,function(b){b.classList.toggle('on',b.getAttribute('data-k')===key);b.setAttribute('aria-pressed',b.getAttribute('data-k')===key);});
+    $('result').hidden=true;
+    render();
+  }
+
+  function buildSel(){
+    var sel=$('opSel');sel.innerHTML='';
+    OPS.forEach(function(gr){
+      var og=el('optgroup',{label:gr.g});
+      gr.items.forEach(function(it){og.appendChild(el('option',{value:it.k,text:it.label}));});
+      sel.appendChild(og);
+    });
+    sel.value=ui.op;
+    sel.addEventListener('change',function(){ui.op=sel.value;var it=OPMAP[ui.op];ui.msg=it.dm||'';renderParams();renderPreview();});
+    ui.msg=OPMAP[ui.op].dm||'';
+  }
+
+  function currentParams(){
+    var it=OPMAP[ui.op],p=E.clone(it.p);
+    if(it.need.files||it.need.filesOpt)p.files=E.names(S).filter(function(f){return ui.files[f];});
+    if(it.need.msg)p.msg=ui.msg;
+    if(it.need.u)p.u=ui.u;
+    if(it.need.branch)p.branch=ui.branch;
+    if(it.need.target)p.target=ui.target;
+    if(it.need.name)p.name=ui.name;
+    if(it.need.edit)p.file=ui.file;
+    return p;
+  }
+
+  function renderParams(){
+    var it=OPMAP[ui.op],box=$('params');box.innerHTML='';
+    var names=E.names(S);
+    if(it.need.files||it.need.filesOpt){
+      var f=el('div',{class:'field'});
+      f.appendChild(el('label',{class:'t',text:it.need.filesOpt?'ファイルを指定（選ばなければ全部）':'対象のファイル（複数選べます）'}));
+      var w=el('div',{class:'files'});
+      names.forEach(function(n){
+        var cb=el('input',{type:'checkbox'});cb.checked=!!ui.files[n];
+        cb.addEventListener('change',function(){ui.files[n]=cb.checked;renderPreview();});
+        var lb=el('label',{},[cb,el('span',{text:n})]);w.appendChild(lb);
+      });
+      f.appendChild(w);box.appendChild(f);
+    }
+    if(it.need.edit){
+      var f2=el('div',{class:'field'});f2.appendChild(el('label',{class:'t',for:'editSel',text:'編集するファイル'}));
+      var s=el('select',{id:'editSel'});
+      names.filter(function(n){return E.g(S.work,n)!==null;}).forEach(function(n){s.appendChild(el('option',{value:n,text:n}));});
+      if(!Array.prototype.some.call(s.options,function(o){return o.value===ui.file;}))ui.file=s.options.length?s.options[0].value:'';
+      s.value=ui.file;s.addEventListener('change',function(){ui.file=s.value;renderPreview();});
+      f2.appendChild(s);box.appendChild(f2);
+    }
+    if(it.need.name){
+      var f3=el('div',{class:'field'});f3.appendChild(el('label',{class:'t',for:'nameIn',text:'新しいファイル名'}));
+      var i=el('input',{type:'text',id:'nameIn',value:ui.name});i.addEventListener('input',function(){ui.name=i.value.trim();renderPreview();});
+      f3.appendChild(i);box.appendChild(f3);
+    }
+    if(it.need.msg){
+      var f4=el('div',{class:'field'});f4.appendChild(el('label',{class:'t',for:'msgIn',text:it.optMsg?'メモ（-m。空ならメモなし）':'コミットメッセージ'}));
+      var m=el('input',{type:'text',id:'msgIn',value:ui.msg});m.addEventListener('input',function(){ui.msg=m.value;renderPreview();});
+      f4.appendChild(m);box.appendChild(f4);
+    }
+    if(it.need.u){
+      var f5=el('div',{class:'field'});
+      var cb2=el('input',{type:'checkbox',id:'uCb'});cb2.checked=ui.u;cb2.addEventListener('change',function(){ui.u=cb2.checked;renderPreview();});
+      f5.appendChild(el('label',{class:'t',for:'uCb'},[cb2,el('span',{text:' -u（新規の未追跡ファイルも預ける）'})]));
+      box.appendChild(f5);
+    }
+    if(it.need.branch){
+      var f6=el('div',{class:'field'});f6.appendChild(el('label',{class:'t',for:'brSel',text:'切り替え先のブランチ'}));
+      var bs=el('select',{id:'brSel'});
+      ['main','feature/login'].forEach(function(b){bs.appendChild(el('option',{value:b,text:b}));});
+      bs.value=ui.branch;bs.addEventListener('change',function(){ui.branch=bs.value;renderPreview();});
+      f6.appendChild(bs);box.appendChild(f6);
+    }
+    if(it.need.target){
+      var f7=el('div',{class:'field'});f7.appendChild(el('label',{class:'t',for:'tgSel',text:'どこへ戻す？'}));
+      var ts=el('select',{id:'tgSel'});
+      [['HEAD~1','HEAD~1（1つ前のコミット）'],['HEAD@{1}','HEAD@{1}（reflog の1つ前）'],['HEAD@{2}','HEAD@{2}（reflog の2つ前）']].forEach(function(o){ts.appendChild(el('option',{value:o[0],text:o[1]}));});
+      ts.value=ui.target;ts.addEventListener('change',function(){ui.target=ts.value;renderPreview();});
+      f7.appendChild(ts);box.appendChild(f7);
+    }
+  }
+
+  function renderPreview(){
+    var it=OPMAP[ui.op];
+    $('preview').innerHTML='<span class="l '+(it.p.op==='edit'||it.p.op==='create'?'cm':'cmd')+'">'+esc(E.cmdString(currentParams()))+'</span>';
+  }
+
+  function vchip(v,cls,diff){
+    var c=el('span',{class:'vc '+(v===null?'none':cls)+(diff?' diff':''),text:v===null?'—':'v'+v});
+    return c;
+  }
+  function renderMatrix(){
+    var t=$('matrix');t.innerHTML='';
+    var head=E.headSnap(S),par=E.parentC(S),psnap=par?par.snap:{};
+    var th=el('tr',{},[
+      el('th',{text:'ファイル',style:'text-align:left'}),
+      el('th',{text:'1つ前 (HEAD~)'}),
+      el('th',{class:'h-repo',text:'コミット (HEAD)'}),
+      el('th',{class:'h-index',text:'ステージ'}),
+      el('th',{class:'h-tree',text:'作業ツリー'}),
+      el('th',{text:'status -s'})]);
+    t.appendChild(th);
+    var st=E.statusEntries(S);
+    E.names(S).forEach(function(f){
+      var h=E.g(head,f),i=E.g(S.index,f),w=E.g(S.work,f),p=E.g(psnap,f);
+      var conf=S.conflicts.indexOf(f)>=0;
+      var row=el('tr');
+      row.appendChild(el('td',{class:'f',text:f}));
+      var c0=el('td');c0.appendChild(vchip(p,'dim',false));if(p!==null)c0.firstChild.className='vc dim';row.appendChild(c0);
+      var c1=el('td');c1.appendChild(vchip(h,'repo',false));row.appendChild(c1);
+      var c2=el('td');c2.appendChild(vchip(i,'index',i!==h));row.appendChild(c2);
+      var c3=el('td');
+      var wv=vchip(w,'tree',w!==i);if(conf){wv.textContent='衝突';wv.className='vc c-danger diff';wv.style.color='var(--danger)';wv.style.borderColor='var(--danger)';}
+      c3.appendChild(wv);row.appendChild(c3);
+      var ents=st.filter(function(e){return e.f===f;});
+      var c4=el('td',{class:'st'});
+      c4.innerHTML=ents.length?ents.map(function(e){return esc(e.xy);}).join('\n'):'<span style="opacity:.5">（変更なし）</span>';
+      row.appendChild(c4);
+      t.appendChild(row);
+    });
+  }
+
+  function renderStatus(){
+    var st=E.statusEntries(S),out='';
+    if(!st.length)out='<span class="l cm"># 何も表示されない＝変更なし</span>';
+    else st.forEach(function(e){
+      var a=e.xy.charAt(0),b=e.xy.charAt(1),cls;
+      var line;
+      if(e.xy==='??')line='<span class="rd">??</span> '+esc(e.f);
+      else if(e.xy==='UU')line='<span class="rd">UU</span> '+esc(e.f);
+      else line=(a===' '?' ':'<span class="gr">'+a+'</span>')+(b===' '?' ':'<span class="rd">'+b+'</span>')+' '+esc(e.f);
+      out+='<span class="l out">'+line+'</span>';
+    });
+    $('statusOut').innerHTML=out;
+  }
+
+  function renderBranch(){
+    $('brName').textContent=S.branch;
+    var parts=[];Object.keys(S.tips).forEach(function(b){parts.push(b+'＝'+S.tips[b]);});
+    $('brOther').textContent='（各ブランチの先頭：'+parts.join(' ／ ')+'）';
+  }
+
+  function renderHistory(){
+    var ul=$('history');ul.innerHTML='';
+    E.history(S,6).forEach(function(c,n){
+      var li=el('li',{class:n===0?'cur':''});
+      li.innerHTML='<span class="sha">'+c.id+'</span> '+esc(c.msg)+(n===0?'<span class="tag">HEAD</span>':'')+'<br>'+
+        c.files.map(function(x){return '<span class="fl">'+x.k+' '+esc(x.f)+'</span>';}).join('');
+      ul.appendChild(li);
+    });
+  }
+  function renderStash(){
+    var ul=$('stashList');ul.innerHTML='';
+    if(!S.stash.length){ul.appendChild(el('li',{html:'<span class="note">（空です）</span>'}));return;}
+    S.stash.forEach(function(e,n){
+      var fl=Object.keys(e.tracked).concat(Object.keys(e.untracked));
+      var li=el('li');
+      li.innerHTML='<b class="mono">stash@{'+n+'}</b>: '+esc(e.text)+'<br>'+fl.map(function(f){return '<span class="fl">'+esc(f)+(e.untracked[f]!==undefined?'（新規）':'')+'</span>';}).join('');
+      ul.appendChild(li);
+    });
+  }
+
+  function renderLog(){
+    var h='';
+    if(!logEntries.length)h='<span class="l cm"># ここに、実行したコマンドが順番に溜まります</span>';
+    logEntries.forEach(function(e){
+      var isC=e.cmd.charAt(0)==='#';
+      h+='<span class="l '+(isC?'cm':'cmd')+'">'+esc(e.cmd)+'</span>';
+      e.out.forEach(function(o){h+='<span class="l '+(e.ok?'out':'bad')+'">'+esc(o)+'</span>';});
+    });
+    $('log').innerHTML=h;
+    var pre=$('log').parentNode;pre.scrollTop=pre.scrollHeight;
+  }
+
+  function render(){
+    renderBranch();renderMatrix();renderStatus();renderHistory();renderStash();renderParams();renderPreview();renderLog();
+  }
+
+  function showResult(r){
+    var box=$('result');box.hidden=false;
+    box.className='result '+(r.ok?(r.danger?'dng':'ok'):'err');
+    box.textContent=(r.ok?(r.danger?'⚠ ':'✔ '):'✖ 失敗：')+r.note;
+  }
+
+  function run(){
+    var p=currentParams(),cmd=E.cmdString(p);
+    undoStack.push({S:E.clone(S),log:logEntries.slice()});
+    var r=E.exec(S,p);
+    logEntries.push({cmd:cmd,out:r.out,ok:r.ok});
+    if(!r.ok||r.out.length===0){/* keep */}
+    showResult(r);
+    ui.files={};
+    render();
+  }
+
+  $('runBtn').addEventListener('click',run);
+  $('undoBtn').addEventListener('click',function(){
+    var u=undoStack.pop();if(!u){showResult({ok:true,note:'これ以上戻せません。'});return;}
+    S=u.S;logEntries=u.log;$('result').hidden=true;render();
+  });
+  $('resetBtn').addEventListener('click',function(){load(scenarioKey);});
+  $('copyBtn').addEventListener('click',function(){
+    var text=logEntries.map(function(e){return e.cmd;}).join('\n');
+    var b=$('copyBtn');function done(){var o=b.textContent;b.textContent='コピーしました';setTimeout(function(){b.textContent=o;},1400);}
+    if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(text).then(done,done);
+    else{var ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');}catch(_){}document.body.removeChild(ta);done();}
+  });
+
+  SCN.forEach(function(s){
+    var b=el('button',{class:'b',type:'button','data-k':s.k,text:s.t});
+    b.addEventListener('click',function(){load(s.k);});
+    $('scn').appendChild(b);
+  });
+
+  CH.forEach(function(c){
+    var d=el('details');
+    d.appendChild(el('summary',{text:c.t}));
+    d.appendChild(el('p',{class:'note',text:'ヒント：'+c.hint}));
+    var btn=el('button',{class:'b',type:'button',text:'この状況を読み込む'});
+    btn.addEventListener('click',function(){load(c.k);window.scrollTo({top:0,behavior:'smooth'});});
+    d.appendChild(btn);
+    var a=el('details');
+    a.appendChild(el('summary',{text:'答えを見る'}));
+    c.ans.forEach(function(seq,n){
+      a.appendChild(el('p',{class:'note',text:c.ans.length>1?('やり方 '+(n+1)):'やり方'}));
+      var pre=el('div',{class:'term'});
+      pre.innerHTML='<pre><code>'+seq.map(function(x){return '<span class="l '+(x.charAt(0)==='#'?'cm':'cmd')+'">'+esc(x)+'</span>';}).join('')+'</code></pre>';
+      a.appendChild(pre);
+    });
+    d.appendChild(a);
+    $('challenges').appendChild(d);
+  });
+
+  buildSel();
+  load('chapter2');
+})();
+</script>
+</body>
+</html>
